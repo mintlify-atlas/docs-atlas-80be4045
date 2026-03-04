@@ -422,6 +422,95 @@ Metadata is accessible via:
 
 ---
 
+---
+
+## Create Book Collection
+
+<api-endpoint>
+  POST /api/books
+</api-endpoint>
+
+Compile multiple stories into a book for NFT minting.
+
+### Request Body
+
+<ParamField body="author_id" type="string" required>
+  User ID (must match authenticated user)
+</ParamField>
+
+<ParamField body="author_wallet" type="string" required>
+  Ethereum address (must match user's wallet)
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  Book title
+</ParamField>
+
+<ParamField body="story_ids" type="string[]" required>
+  Array of story UUIDs to include (must be non-empty)
+</ParamField>
+
+<ParamField body="description" type="string" optional>
+  Book description
+</ParamField>
+
+<ParamField body="ipfs_hash" type="string" optional>
+  IPFS hash for NFT metadata
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful creation
+</ResponseField>
+
+<ResponseField name="book" type="object">
+  The created book object
+  <Expandable title="book fields">
+    <ResponseField name="id" type="string">
+      Book UUID
+    </ResponseField>
+    <ResponseField name="author_id" type="string">
+      User ID
+    </ResponseField>
+    <ResponseField name="author_wallet" type="string">
+      Ethereum address
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      Book title
+    </ResponseField>
+    <ResponseField name="description" type="string | null">
+      Book description
+    </ResponseField>
+    <ResponseField name="story_ids" type="string[]">
+      Array of story UUIDs
+    </ResponseField>
+    <ResponseField name="ipfs_hash" type="string | null">
+      IPFS metadata hash
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Request
+
+```bash cURL
+curl -X POST https://istory.vercel.app/api/books \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "author_id": "user-uuid",
+    "author_wallet": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+    "title": "My Journey 2026",
+    "story_ids": ["story-uuid-1", "story-uuid-2"],
+    "description": "A collection of my most memorable moments"
+  }'
+```
+
+---
+
 ## Next Steps
 
 <CardGroup cols={2}>
