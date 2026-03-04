@@ -1,0 +1,472 @@
+---
+title: 'Social Endpoints'
+description: 'Likes, follows, and social interactions'
+icon: 'users'
+---
+
+## Overview
+
+Social endpoints enable community features: liking stories, following creators, and receiving notifications.
+
+<Note>
+All social endpoints require authentication and enforce ownership validation.
+</Note>
+
+---
+
+## Toggle Like
+
+<api-endpoint>
+  POST /api/social/like
+</api-endpoint>
+
+Like or unlike a story. This endpoint automatically toggles the like state.
+
+### Request Body
+
+<ParamField body="storyId" type="string" required>
+  UUID of the story to like/unlike
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful operation
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Like operation result
+  <Expandable title="data fields">
+    <ResponseField name="storyId" type="string">
+      Story UUID
+    </ResponseField>
+    <ResponseField name="isLiked" type="boolean">
+      Current like state after toggle
+    </ResponseField>
+    <ResponseField name="totalLikes" type="number">
+      Updated like count
+    </ResponseField>
+    <ResponseField name="timestamp" type="string">
+      ISO 8601 timestamp of the operation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  `"Story liked!"` or `"Story unliked."`
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/social/like \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"storyId": "123e4567-e89b-12d3-a456-426614174000"}'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/social/like', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ storyId })
+});
+
+const { data } = await response.json();
+console.log(`Story is now ${data.isLiked ? 'liked' : 'unliked'}`);
+```
+</CodeGroup>
+
+### Example Response (Like)
+
+```json
+{
+  "success": true,
+  "data": {
+    "storyId": "123e4567-e89b-12d3-a456-426614174000",
+    "isLiked": true,
+    "totalLikes": 5,
+    "timestamp": "2026-03-04T10:30:00.000Z"
+  },
+  "message": "Story liked!"
+}
+```
+
+### Example Response (Unlike)
+
+```json
+{
+  "success": true,
+  "data": {
+    "storyId": "123e4567-e89b-12d3-a456-426614174000",
+    "isLiked": false,
+    "totalLikes": 4,
+    "timestamp": "2026-03-04T10:30:15.000Z"
+  },
+  "message": "Story unliked."
+}
+```
+
+### Behavior
+
+1. **Like** - If not already liked:
+   - Creates a record in `likes` table
+   - Increments `stories.likes` counter
+   - Creates a notification for the story author (unless you're liking your own story)
+
+2. **Unlike** - If already liked:
+   - Deletes the record from `likes` table
+   - Decrements `stories.likes` counter (floor at 0)
+   - No notification
+
+### Notifications
+
+When you like another user's story, they receive a notification:
+
+```json
+{
+  "type": "like",
+  "title": "New Like",
+  "message": "Alice liked your story",
+  "story_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request">
+```json
+{ "error": "Story ID is required" }
+```
+</Expandable>
+
+---
+
+## Follow User
+
+<api-endpoint>
+  POST /api/social/follow
+</api-endpoint>
+
+Follow or unfollow a user by wallet address. This endpoint automatically toggles the follow state.
+
+### Request Body
+
+<ParamField body="follower_wallet" type="string" required>
+  Your Ethereum address (must match authenticated user's wallet)
+</ParamField>
+
+<ParamField body="followed_wallet" type="string" required>
+  Target user's Ethereum address
+</ParamField>
+
+### Response
+
+<ResponseField name="isFollowing" type="boolean">
+  Current follow state after toggle
+</ResponseField>
+
+<ResponseField name="followers_count" type="number">
+  Updated follower count for the target user
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/social/follow \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "follower_wallet": "0x742d35cc6634c0532925a3b844bc9e7595f0beb",
+    "followed_wallet": "0x1234567890abcdef1234567890abcdef12345678"
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/social/follow', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    follower_wallet: myWallet,
+    followed_wallet: targetWallet
+  })
+});
+
+const { isFollowing, followers_count } = await response.json();
+```
+</CodeGroup>
+
+### Example Response (Follow)
+
+```json
+{
+  "isFollowing": true,
+  "followers_count": 42
+}
+```
+
+### Example Response (Unfollow)
+
+```json
+{
+  "isFollowing": false,
+  "followers_count": 41
+}
+```
+
+### Behavior
+
+1. **Follow** - If not already following:
+   - Creates a record in `follows` table
+   - Increments `users.followers_count` for the target user
+   - Creates a notification for the followed user
+
+2. **Unfollow** - If already following:
+   - Deletes the record from `follows` table
+   - Decrements `users.followers_count` for the target user (floor at 0)
+   - No notification
+
+### Notifications
+
+When you follow a user, they receive a notification:
+
+```json
+{
+  "type": "follow",
+  "title": "New Follower",
+  "message": "Alice started following you"
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request - Missing Fields">
+```json
+{ "error": "Missing follower_wallet or followed_wallet" }
+```
+</Expandable>
+
+<Expandable title="400 Bad Request - Self Follow">
+```json
+{ "error": "Cannot follow yourself" }
+```
+</Expandable>
+
+<Expandable title="403 Forbidden">
+```json
+{ "error": "Forbidden" }
+```
+The `follower_wallet` doesn't match the authenticated user's wallet.
+</Expandable>
+
+---
+
+## Check Follow Status
+
+<api-endpoint>
+  GET /api/social/follow
+</api-endpoint>
+
+Check if you're following one or more users.
+
+### Query Parameters
+
+<ParamField query="follower_wallet" type="string" required>
+  Your Ethereum address
+</ParamField>
+
+<ParamField query="followed_wallets" type="string" required>
+  Comma-separated list of wallet addresses to check
+</ParamField>
+
+### Response
+
+<ResponseField name="following" type="object">
+  Map of wallet addresses to follow status
+  
+  ```typescript
+  {
+    [walletAddress: string]: boolean
+  }
+  ```
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl "https://istory.vercel.app/api/social/follow?follower_wallet=0x742d35cc6634c0532925a3b844bc9e7595f0beb&followed_wallets=0x1234...5678,0xabcd...ef01" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```typescript TypeScript
+const wallets = ['0x1234...5678', '0xabcd...ef01'];
+const params = new URLSearchParams({
+  follower_wallet: myWallet,
+  followed_wallets: wallets.join(',')
+});
+
+const response = await fetch(
+  `https://istory.vercel.app/api/social/follow?${params}`,
+  { headers: { 'Authorization': `Bearer ${token}` } }
+);
+
+const { following } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "following": {
+    "0x1234567890abcdef1234567890abcdef12345678": true,
+    "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd": false
+  }
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request">
+```json
+{ "error": "Missing follower_wallet or followed_wallets" }
+```
+</Expandable>
+
+---
+
+## Database Schema
+
+### likes table
+
+```sql
+CREATE TABLE likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, story_id)
+);
+```
+
+### follows table
+
+```sql
+CREATE TABLE follows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  follower_wallet TEXT NOT NULL,
+  followed_wallet TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(follower_wallet, followed_wallet)
+);
+```
+
+### notifications table
+
+```sql
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,  -- 'like', 'follow', 'comment'
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  story_id UUID REFERENCES stories(id) ON DELETE SET NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Toggle Pattern" icon="toggle-on">
+    Both like and follow use toggle logic - no need to check current state before calling
+  </Card>
+  <Card title="Idempotent Operations" icon="repeat">
+    Calling the same operation twice is safe (uses upsert for likes, check-before-insert for follows)
+  </Card>
+  <Card title="Batch Follow Checks" icon="list-check">
+    Use comma-separated wallets to check multiple follow statuses in one request
+  </Card>
+  <Card title="Notification Awareness" icon="bell">
+    Liking and following trigger notifications - consider this in UX design
+  </Card>
+</CardGroup>
+
+---
+
+## Example: Social Feed Component
+
+```typescript
+// Like a story
+async function toggleLike(storyId: string) {
+  const response = await fetch('/api/social/like', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ storyId })
+  });
+  
+  const { data } = await response.json();
+  return data; // { isLiked, totalLikes }
+}
+
+// Follow a user
+async function toggleFollow(targetWallet: string) {
+  const response = await fetch('/api/social/follow', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      follower_wallet: myWallet,
+      followed_wallet: targetWallet
+    })
+  });
+  
+  const { isFollowing, followers_count } = await response.json();
+  return { isFollowing, followers_count };
+}
+
+// Check follow status for multiple users
+async function checkFollowStatus(wallets: string[]) {
+  const params = new URLSearchParams({
+    follower_wallet: myWallet,
+    followed_wallets: wallets.join(',')
+  });
+  
+  const response = await fetch(`/api/social/follow?${params}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  const { following } = await response.json();
+  return following; // { [wallet]: boolean }
+}
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Overview" icon="book" href="/api/overview">
+    Return to API overview
+  </Card>
+  <Card title="Authentication" icon="shield" href="/api/authentication">
+    Review authentication methods
+  </Card>
+</CardGroup>

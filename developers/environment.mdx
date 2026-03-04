@@ -1,0 +1,355 @@
+---
+title: 'Environment Variables'
+description: 'Configure API keys and secrets for eStory'
+icon: 'key'
+---
+
+## Overview
+
+eStory requires multiple API keys and secrets to function. All sensitive values should be stored in `.env.local` and never committed to version control.
+
+<Warning>
+  The `.env.local` file contains sensitive credentials. Always keep it private and add it to your `.gitignore`.
+</Warning>
+
+## Configuration Groups
+
+### Supabase
+
+Required for database, authentication, and storage.
+
+```env
+# Get these from: https://supabase.com/dashboard/project/[your-project]/settings/api
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+```
+
+<Steps>
+  <Step title="Get Supabase Credentials">
+    1. Log into your Supabase dashboard
+    2. Navigate to **Settings > API**
+    3. Copy the **Project URL** (use for `NEXT_PUBLIC_SUPABASE_URL`)
+    4. Copy the **anon public** key (use for `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+    5. Copy the **service_role** key (use for `SUPABASE_SERVICE_ROLE_KEY`)
+  </Step>
+</Steps>
+
+<Note>
+  The `service_role` key bypasses Row Level Security (RLS) and should only be used in secure server-side contexts.
+</Note>
+
+### WalletConnect / RainbowKit
+
+Required for Web3 wallet connections.
+
+```env
+# Get this from: https://cloud.walletconnect.com/
+NEXT_PUBLIC_PROJECT_ID=your-walletconnect-project-id
+```
+
+<Steps>
+  <Step title="Create WalletConnect Project">
+    1. Visit [cloud.walletconnect.com](https://cloud.walletconnect.com/)
+    2. Sign up or log in
+    3. Create a new project
+    4. Copy the **Project ID**
+  </Step>
+</Steps>
+
+### AI Services
+
+eStory uses two AI services for transcription and text enhancement.
+
+<CodeGroup>
+  ```env Google Gemini
+  # Google Gemini API Key (for text enhancement and story analysis)
+  # Get from: https://makersuite.google.com/app/apikey
+  GOOGLE_GENERATIVE_AI_API_KEY=your-google-ai-api-key
+  ```
+
+  ```env ElevenLabs
+  # ElevenLabs API Key (for speech-to-text transcription)
+  # Get from: https://elevenlabs.io/app/settings/api-keys
+  ELEVENLABS_API_KEY=your-elevenlabs-api-key
+  ```
+</CodeGroup>
+
+<Steps>
+  <Step title="Get Google Gemini API Key">
+    1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+    2. Sign in with your Google account
+    3. Click **Get API Key**
+    4. Create a new API key
+    5. Copy the key and add it to `.env.local`
+  </Step>
+
+  <Step title="Get ElevenLabs API Key">
+    1. Sign up at [elevenlabs.io](https://elevenlabs.io)
+    2. Navigate to **Settings > API Keys**
+    3. Generate a new API key
+    4. Copy the key and add it to `.env.local`
+  </Step>
+</Steps>
+
+### IPFS / Pinata
+
+Used for decentralized storage of NFT metadata.
+
+```env
+# Get from: https://app.pinata.cloud/developers/api-keys
+PINATA_JWT=your-pinata-jwt-token
+NEXT_PUBLIC_IPFS_GATEWAY=https://gateway.pinata.cloud/ipfs/
+```
+
+<Steps>
+  <Step title="Get Pinata Credentials">
+    1. Sign up at [pinata.cloud](https://app.pinata.cloud)
+    2. Go to **Developers > API Keys**
+    3. Create a new API key with appropriate permissions
+    4. Copy the **JWT** token
+  </Step>
+</Steps>
+
+### Smart Contract Addresses
+
+eStory's smart contracts are deployed on **Base Sepolia** (testnet).
+
+```env
+# Populated after deploying contracts to Base Sepolia
+NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS=0x...
+NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0x...
+NEXT_PUBLIC_STORY_NFT_ADDRESS=0x...
+NEXT_PUBLIC_INITIAL_ADMIN_ADDRESS=0x...
+NEXT_PUBLIC_VERIFIED_METRICS_ADDRESS=0x...
+```
+
+<Info>
+  If you're using the official deployed contracts, these addresses can be found in `lib/contracts.ts`. For development, you can deploy your own instances.
+</Info>
+
+### Blockchain / Hardhat Deployment
+
+Required only if you're deploying your own smart contract instances.
+
+```env
+# Private key for deploying contracts (WITHOUT 0x prefix)
+# WARNING: Never share or commit this key!
+ADMIN_WALLET_PRIVATE_KEY=your-wallet-private-key
+
+# Basescan API key for contract verification
+# Get from: https://basescan.org/myapikey
+BASESCAN_API_KEY=your-basescan-api-key
+
+# Admin private key for cron jobs (token distribution)
+ADMIN_PRIVATE_KEY=your-admin-private-key
+```
+
+<Warning>
+  **Never commit private keys to version control!** These keys control real blockchain accounts and funds.
+</Warning>
+
+<Steps>
+  <Step title="Export MetaMask Private Key">
+    1. Open MetaMask
+    2. Click the three dots > **Account Details**
+    3. Click **Export Private Key**
+    4. Enter your MetaMask password
+    5. Copy the private key (remove the `0x` prefix for Hardhat)
+  </Step>
+
+  <Step title="Get Basescan API Key">
+    1. Visit [basescan.org](https://basescan.org)
+    2. Sign up or log in
+    3. Go to **My API Keys**
+    4. Create a new API key for contract verification
+  </Step>
+</Steps>
+
+### Email (Resend)
+
+Used for transactional emails.
+
+```env
+# Get from: https://resend.com/api-keys
+RESEND_API_KEY=your-resend-api-key
+```
+
+<Steps>
+  <Step title="Get Resend API Key">
+    1. Sign up at [resend.com](https://resend.com)
+    2. Go to **API Keys**
+    3. Create a new API key
+    4. Copy the key
+  </Step>
+</Steps>
+
+### Chainlink CRE (Optional)
+
+Required for Chainlink Compute Runtime Environment integration.
+
+```env
+# Secret for authenticating CRE DON callback requests
+CRE_CALLBACK_SECRET=your-cre-callback-secret
+
+# CRE workflow URL (set after deployment)
+CRE_WORKFLOW_URL=
+CRE_API_KEY=
+```
+
+<Note>
+  CRE integration is optional and only needed if you're running verifiable AI computation workflows.
+</Note>
+
+### Cron Jobs
+
+Used to secure automated tasks like token distribution.
+
+```env
+# Secret for authenticating cron job requests
+CRON_SECRET=your-random-secret-string
+```
+
+<Info>
+  Generate a strong random string using `openssl rand -base64 32` or similar.
+</Info>
+
+## Complete Example
+
+Here's a complete `.env.local` template with all variables:
+
+```env
+# ===========================================
+# eStory dApp Environment Variables
+# ===========================================
+
+# -------------------------------------------
+# Supabase Configuration
+# -------------------------------------------
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# -------------------------------------------
+# WalletConnect / RainbowKit
+# -------------------------------------------
+NEXT_PUBLIC_PROJECT_ID=your-walletconnect-project-id
+
+# -------------------------------------------
+# AI Services
+# -------------------------------------------
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-ai-api-key
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+
+# -------------------------------------------
+# IPFS / Pinata
+# -------------------------------------------
+PINATA_JWT=your-pinata-jwt-token
+NEXT_PUBLIC_IPFS_GATEWAY=https://gateway.pinata.cloud/ipfs/
+
+# -------------------------------------------
+# Smart Contract Addresses (Base Sepolia)
+# -------------------------------------------
+NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS=0x...
+NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0x...
+NEXT_PUBLIC_STORY_NFT_ADDRESS=0x...
+NEXT_PUBLIC_INITIAL_ADMIN_ADDRESS=0x...
+NEXT_PUBLIC_VERIFIED_METRICS_ADDRESS=0x...
+
+# -------------------------------------------
+# Blockchain / Hardhat Deployment
+# -------------------------------------------
+ADMIN_WALLET_PRIVATE_KEY=your-wallet-private-key
+BASESCAN_API_KEY=your-basescan-api-key
+ADMIN_PRIVATE_KEY=your-admin-private-key
+
+# -------------------------------------------
+# Email (Resend)
+# -------------------------------------------
+RESEND_API_KEY=your-resend-api-key
+
+# -------------------------------------------
+# Chainlink CRE (Optional)
+# -------------------------------------------
+CRE_CALLBACK_SECRET=your-cre-callback-secret
+CRE_WORKFLOW_URL=
+CRE_API_KEY=
+
+# -------------------------------------------
+# Cron Jobs
+# -------------------------------------------
+CRON_SECRET=your-random-secret-string
+```
+
+## Verification
+
+After setting up your environment variables, verify they're loaded correctly:
+
+<CodeGroup>
+  ```bash Check Public Variables
+  # Start dev server and check browser console
+  npm run dev
+  ```
+
+  ```bash Validate Configuration
+  # All public variables (NEXT_PUBLIC_*) should be accessible
+  # Private variables should NOT appear in browser
+  ```
+</CodeGroup>
+
+<Warning>
+  Never use `NEXT_PUBLIC_` prefix for sensitive keys like private keys or service role keys. These values will be exposed to the browser!
+</Warning>
+
+## Environment-Specific Configuration
+
+<Tabs>
+  <Tab title="Development">
+    Use `.env.local` for local development. This file is gitignored and never committed.
+
+    ```bash
+    npm run dev
+    ```
+  </Tab>
+
+  <Tab title="Production">
+    For production deployments (e.g., Vercel), add environment variables through the hosting platform's dashboard.
+
+    On Vercel:
+    1. Go to **Project Settings > Environment Variables**
+    2. Add each variable with appropriate scope (Production/Preview/Development)
+    3. Redeploy to apply changes
+  </Tab>
+
+  <Tab title="Testing">
+    Tests use environment variables from `.env.local` or can use mocked values.
+
+    ```bash
+    # Runs with .env.local
+    npx vitest run
+    ```
+  </Tab>
+</Tabs>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Never Commit Secrets" icon="lock">
+    Always add `.env.local` to `.gitignore`
+  </Card>
+  <Card title="Use Public Prefix Carefully" icon="eye">
+    Only use `NEXT_PUBLIC_` for non-sensitive values
+  </Card>
+  <Card title="Rotate Keys Regularly" icon="rotate">
+    Periodically update API keys and secrets
+  </Card>
+  <Card title="Use Different Keys Per Environment" icon="layer-group">
+    Separate keys for development and production
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Start Local Development" href="/developers/local-development" icon="code">
+  Learn about development workflows and available commands
+</Card>

@@ -1,0 +1,409 @@
+---
+title: 'eStoryToken (ERC20)'
+description: 'ERC20 utility token with minting, burning, and pausing capabilities'
+icon: 'coins'
+---
+
+## Overview
+
+**eStoryToken** (`ESTORY`) is the native utility token of the iStory platform. It implements ERC20 with additional features:
+
+- **Supply Cap**: 100M tokens max (100,000,000 * 10^18 wei)
+- **Burnable**: Users can burn their tokens
+- **Pausable**: Admin can pause transfers in emergencies
+- **Permit**: Gasless approvals via EIP-2612
+- **Access Control**: Role-based minting and pausing
+
+### Contract Address
+
+<CodeGroup>
+```typescript Address
+const STORY_TOKEN_ADDRESS = "0xf9eDD76B55F58Bf4E8Ae2A90a1D6d8d44dfA74BC";
+```
+
+```bash Base Sepolia Explorer
+https://sepolia.basescan.org/address/0xf9eDD76B55F58Bf4E8Ae2A90a1D6d8d44dfA74BC
+```
+</CodeGroup>
+
+## Token Details
+
+<ParamField path="name" type="string">
+  eStoryToken
+</ParamField>
+
+<ParamField path="symbol" type="string">
+  ESTORY
+</ParamField>
+
+<ParamField path="decimals" type="uint8">
+  18 (standard ERC20 decimals)
+</ParamField>
+
+<ParamField path="MAX_SUPPLY" type="uint256">
+  100,000,000 * 10^18 (100 million tokens)
+</ParamField>
+
+<ParamField path="initialSupply" type="uint256">
+  1,000,000 * 10^18 (1 million tokens minted to admin on deployment)
+</ParamField>
+
+## Contract Code
+
+```solidity contracts/iStoryToken.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+
+contract EStoryToken is ERC20, ERC20Burnable, ERC20Permit, AccessControl, Pausable {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+    uint256 public constant MAX_SUPPLY = 100_000_000 * 10 ** 18; // 100M tokens
+
+    constructor(address initialAdmin)
+        ERC20("eStoryToken", "ESTORY")
+        ERC20Permit("eStoryToken")
+    {
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
+        _grantRole(MINTER_ROLE, initialAdmin);
+        _grantRole(PAUSER_ROLE, initialAdmin);
+
+        // Initial supply to admin for liquidity/rewards pool
+        _mint(initialAdmin, 1_000_000 * 10 ** decimals());
+    }
+
+    // Called by Backend to reward users for off-chain activity (Likes, Streaks)
+    function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        require(totalSupply() + amount <= MAX_SUPPLY, "Exceeds max supply");
+        _mint(to, amount);
+    }
+
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+
+    // Hook required by OZ 5.0 to enforce pause state
+    function _update(address from, address to, uint256 value) internal override(ERC20) {
+        require(!paused(), "Token transfer while paused");
+        super._update(from, to, value);
+    }
+}
+```
+
+## Functions
+
+### Standard ERC20
+
+<Accordion title="balanceOf(address owner) → uint256">
+  Returns the token balance of `owner`.
+  
+  ```solidity
+  function balanceOf(address owner) view returns (uint256)
+  ```
+  
+  <ParamField path="owner" type="address" required>
+    Address to check balance for
+  </ParamField>
+  
+  <ResponseField name="balance" type="uint256">
+    Token balance in wei (18 decimals)
+  </ResponseField>
+</Accordion>
+
+<Accordion title="transfer(address to, uint256 amount) → bool">
+  Transfers `amount` tokens to `to`.
+  
+  ```solidity
+  function transfer(address to, uint256 amount) returns (bool)
+  ```
+  
+  <ParamField path="to" type="address" required>
+    Recipient address
+  </ParamField>
+  
+  <ParamField path="amount" type="uint256" required>
+    Amount in wei (e.g., 10 tokens = 10 * 10^18 wei)
+  </ParamField>
+  
+  <Warning>Reverts if paused or if sender has insufficient balance.</Warning>
+</Accordion>
+
+<Accordion title="approve(address spender, uint256 amount) → bool">
+  Allows `spender` to transfer up to `amount` tokens from caller's account.
+  
+  ```solidity
+  function approve(address spender, uint256 amount) returns (bool)
+  ```
+  
+  <ParamField path="spender" type="address" required>
+    Address authorized to spend tokens (e.g., StoryProtocol contract)
+  </ParamField>
+  
+  <ParamField path="amount" type="uint256" required>
+    Maximum amount spender can transfer
+  </ParamField>
+  
+  <Note>
+    Users must approve StoryProtocol before tipping or paying paywalls:
+    
+    ```typescript
+    await approve(STORY_PROTOCOL_ADDRESS, parseEther("100"));
+    ```
+  </Note>
+</Accordion>
+
+<Accordion title="allowance(address owner, address spender) → uint256">
+  Returns remaining allowance for `spender` from `owner`.
+  
+  ```solidity
+  function allowance(address owner, address spender) view returns (uint256)
+  ```
+</Accordion>
+
+### Minting (Admin Only)
+
+<Accordion title="mint(address to, uint256 amount)">
+  Mints new tokens to `to`. Only callable by addresses with `MINTER_ROLE`.
+  
+  ```solidity
+  function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused
+  ```
+  
+  <ParamField path="to" type="address" required>
+    Recipient of newly minted tokens
+  </ParamField>
+  
+  <ParamField path="amount" type="uint256" required>
+    Amount to mint in wei
+  </ParamField>
+  
+  <Warning>
+    **Supply Cap**: Reverts if `totalSupply() + amount > MAX_SUPPLY`.
+    
+    **Use Case**: Backend calls this to reward users for off-chain activity (likes, streaks, weekly challenges).
+  </Warning>
+</Accordion>
+
+### Burning
+
+<Accordion title="burn(uint256 amount)">
+  Burns `amount` tokens from caller's balance.
+  
+  ```solidity
+  function burn(uint256 amount) external
+  ```
+  
+  <ParamField path="amount" type="uint256" required>
+    Amount to burn in wei
+  </ParamField>
+  
+  <Note>Permanently reduces total supply. Irreversible.</Note>
+</Accordion>
+
+### Pausing (Admin Only)
+
+<Accordion title="pause()">
+  Pauses all token transfers. Only callable by `PAUSER_ROLE`.
+  
+  ```solidity
+  function pause() external onlyRole(PAUSER_ROLE)
+  ```
+  
+  <Warning>Emergency use only. All transfers will revert until `unpause()` is called.</Warning>
+</Accordion>
+
+<Accordion title="unpause()">
+  Resumes token transfers after a pause.
+  
+  ```solidity
+  function unpause() external onlyRole(PAUSER_ROLE)
+  ```
+</Accordion>
+
+## Events
+
+```solidity
+event Transfer(address indexed from, address indexed to, uint256 value);
+```
+
+Emitted when tokens are transferred (including mints and burns).
+
+<ResponseField name="from" type="address">
+  Sender address (address(0) for mints)
+</ResponseField>
+
+<ResponseField name="to" type="address">
+  Recipient address (address(0) for burns)
+</ResponseField>
+
+<ResponseField name="value" type="uint256">
+  Amount transferred in wei
+</ResponseField>
+
+## Roles
+
+<ParamField path="MINTER_ROLE" type="bytes32">
+  `keccak256("MINTER_ROLE")` - Can mint new tokens up to MAX_SUPPLY
+</ParamField>
+
+<ParamField path="PAUSER_ROLE" type="bytes32">
+  `keccak256("PAUSER_ROLE")` - Can pause/unpause transfers
+</ParamField>
+
+<ParamField path="DEFAULT_ADMIN_ROLE" type="bytes32">
+  `0x00...00` - Can grant/revoke all roles
+</ParamField>
+
+## Usage Examples
+
+### Check Balance
+
+<CodeGroup>
+```typescript React Hook
+import { useEStoryToken } from '@/app/hooks/useEStoryToken';
+import { formatEther } from 'viem';
+
+function TokenBalance() {
+  const { balance, isLoading } = useEStoryToken();
+  
+  if (isLoading) return <div>Loading...</div>;
+  
+  return (
+    <div>
+      Balance: {formatEther(balance)} ESTORY
+    </div>
+  );
+}
+```
+
+```typescript Direct Call
+import { publicClient } from '@/lib/wagmi';
+import { STORY_TOKEN_ABI, STORY_TOKEN_ADDRESS } from '@/lib/contracts';
+
+const balance = await publicClient.readContract({
+  address: STORY_TOKEN_ADDRESS,
+  abi: STORY_TOKEN_ABI,
+  functionName: 'balanceOf',
+  args: [userAddress]
+});
+
+console.log(formatEther(balance)); // "123.45" ESTORY
+```
+</CodeGroup>
+
+### Approve StoryProtocol
+
+Users must approve StoryProtocol before tipping or paying paywalls:
+
+```typescript app/hooks/useStoryProtocol.ts
+import { useEStoryToken } from '@/app/hooks/useEStoryToken';
+import { STORY_PROTOCOL_ADDRESS } from '@/lib/contracts';
+import { parseEther } from 'viem';
+
+async function tipCreator() {
+  const { approve } = useEStoryToken();
+  
+  // 1. Approve StoryProtocol to spend tokens
+  await approve(STORY_PROTOCOL_ADDRESS, parseEther("10"));
+  
+  // 2. Call tipCreator on StoryProtocol
+  // (handled by StoryProtocol contract)
+}
+```
+
+### Transfer Tokens
+
+```typescript Transfer to Another User
+import { useWriteContract } from 'wagmi';
+import { STORY_TOKEN_ABI, STORY_TOKEN_ADDRESS } from '@/lib/contracts';
+import { parseEther } from 'viem';
+
+const { writeContract } = useWriteContract();
+
+await writeContract({
+  address: STORY_TOKEN_ADDRESS,
+  abi: STORY_TOKEN_ABI,
+  functionName: 'transfer',
+  args: [recipientAddress, parseEther("5")] // Send 5 ESTORY
+});
+```
+
+### Mint Tokens (Backend Only)
+
+```typescript Backend API Route
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { STORY_TOKEN_ABI, STORY_TOKEN_ADDRESS } from '@/lib/contracts';
+
+const account = privateKeyToAccount(process.env.MINTER_PRIVATE_KEY);
+const walletClient = createWalletClient({
+  account,
+  chain: baseSepolia,
+  transport: http()
+});
+
+// Mint 10 ESTORY to user for completing a streak
+await walletClient.writeContract({
+  address: STORY_TOKEN_ADDRESS,
+  abi: STORY_TOKEN_ABI,
+  functionName: 'mint',
+  args: [userAddress, parseEther("10")]
+});
+```
+
+## Security Considerations
+
+<Warning>
+**Approval Best Practices**:
+
+- Never approve `type(uint256).max` (infinite approval) unless you fully trust the spender contract
+- Revoke approvals after use: `approve(spender, 0)`
+- Check allowances before approving: `allowance(owner, spender)`
+</Warning>
+
+<Note>
+**Pausable Design**:
+
+The `_update()` hook prevents all transfers when paused, including:
+- Direct `transfer()` calls
+- `transferFrom()` via approved spenders
+- Minting (checked separately in `mint()`)
+
+Burning is NOT blocked when paused (OpenZeppelin design choice).
+</Note>
+
+## ABI Reference
+
+```typescript lib/contracts.ts
+export const STORY_TOKEN_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)"
+] as const;
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="StoryProtocol" icon="handshake" href="/contracts/story-protocol">
+    Use ESTORY tokens for tipping and paywalls
+  </Card>
+  <Card title="StoryNFT" icon="image" href="/contracts/story-nft">
+    Pay mint fees in ETH to create NFT collections
+  </Card>
+</CardGroup>

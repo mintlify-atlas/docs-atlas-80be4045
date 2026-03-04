@@ -1,0 +1,336 @@
+---
+title: Blockchain Storage
+description: Permanently preserve your stories on IPFS with blockchain-verified authorship
+icon: link
+---
+
+## What is Blockchain Storage?
+
+Every story you save in eStory is **permanently pinned to IPFS** (InterPlanetary File System), a decentralized storage network. Your story metadata—title, content, author wallet, audio URL, and timestamps—becomes an immutable record linked to your wallet address. This creates **sovereign ownership**: you control the data, and no central authority can delete or censor it.
+
+## Why Use Blockchain Storage?
+
+<CardGroup cols={2}>
+  <Card title="Permanence" icon="infinity">
+    Stories are stored forever on IPFS nodes. Even if eStory shuts down, your data persists.
+  </Card>
+  <Card title="Censorship Resistance" icon="shield">
+    No one can delete or alter your stories—not eStory, not governments, not hackers.
+  </Card>
+  <Card title="Proof of Authorship" icon="fingerprint">
+    Your wallet address cryptographically proves you authored the story at a specific time.
+  </Card>
+  <Card title="Data Portability" icon="arrow-right-arrow-left">
+    IPFS hashes let you retrieve your stories from any IPFS gateway—no lock-in.
+  </Card>
+</CardGroup>
+
+## How Stories Are Stored
+
+<Steps>
+  <Step title="Save Your Story">
+    When you click **Save Privately** or **Publish & Save**, the following happens in parallel:
+    
+    1. **Audio upload** (if recorded): Original audio → Supabase Storage
+    2. **IPFS upload**: Story metadata → Pinata IPFS pinning service
+    3. **Database save**: Story record → Supabase PostgreSQL
+    4. **Vault encryption** (optional): Encrypted copy → Local IndexedDB
+  </Step>
+
+  <Step title="IPFS Metadata Structure">
+    Your story is encoded as JSON and uploaded to IPFS:
+    
+    ```json
+    {
+      "title": "Journal Entry - 3/4/2026",
+      "content": "Your story text here...",
+      "author": "0xYourWalletAddress",
+      "audio": "https://supabase.co/storage/audio/abc123.webm",
+      "date": "2026-03-04",
+      "timestamp": "2026-03-04T18:32:11.000Z",
+      "is_public": false,
+      "app": "EStory DApp"
+    }
+    ```
+    
+    **Two timestamps:**
+    - `date`: User-selected memory date (for backdating)
+    - `timestamp`: Actual upload time (system clock)
+  </Step>
+
+  <Step title="Pinata Pinning">
+    The metadata JSON is sent to **Pinata** (IPFS pinning service) via `/api/ipfs/upload`. Pinata:
+    
+    - Uploads the file to IPFS network
+    - Returns a **CID** (Content Identifier) like `QmXyz...`
+    - Keeps the file pinned (prevents garbage collection)
+    
+    <Info>CID is a cryptographic hash of the content—changing even one character creates a different CID.</Info>
+  </Step>
+
+  <Step title="Database Record">
+    The story is saved to Supabase `stories` table with:
+    
+    - `author_id`: Your user ID (UUID)
+    - `author_wallet`: Your wallet address (Ethereum format)
+    - `ipfs_hash`: The IPFS CID from Pinata
+    - `is_public`: Visibility flag (true/false)
+    - `created_at`: System timestamp
+    - `story_date`: User-selected memory date
+  </Step>
+
+  <Step title="Success Confirmation">
+    You see a toast notification: **"Story saved & pinned to IPFS!"**
+    
+    The IPFS hash is stored in your story metadata. You can retrieve it from any IPFS gateway:
+    ```
+    https://gateway.pinata.cloud/ipfs/<your-CID>
+    https://ipfs.io/ipfs/<your-CID>
+    https://cloudflare-ipfs.com/ipfs/<your-CID>
+    ```
+  </Step>
+</Steps>
+
+## IPFS Technical Details
+
+### Content Identifier (CID)
+
+Every IPFS file gets a unique **CID** based on its content hash.
+
+**Example CID:**
+```
+QmYwAPJzv5CZsnAzt8auVkN6TkTvZGKq9Xv7jvLZMrk8Lx
+```
+
+**Properties:**
+- **Deterministic**: Same content → same CID
+- **Tamper-proof**: Changing content changes CID
+- **Universal**: Retrievable from any IPFS node
+
+### Pinning vs. Unpinning
+
+| Concept | Explanation |
+|---------|-------------|
+| **Pinning** | Tells IPFS nodes to keep the file cached permanently (prevents garbage collection) |
+| **Unpinning** | Allows IPFS to delete the file if space is needed |
+
+eStory uses **Pinata** to pin all stories, ensuring they never expire.
+
+### Data Availability
+
+<Accordion title="Who can access IPFS data?">
+  **Public stories:** Anyone with the CID can view the content via IPFS gateways.
+  
+  **Private stories:** The `is_public: false` flag in metadata is informational only. IPFS itself is public—privacy relies on:
+  1. **Not sharing the CID** (keep it secret)
+  2. **Local Vault encryption** (content encrypted before IPFS upload in future version)
+  
+  <Warning>Current implementation: IPFS metadata is **not encrypted**. If someone gets your CID, they can read the story. Use Local Vault for true privacy.</Warning>
+</Accordion>
+
+## Blockchain Verification (Future)
+
+### Current State: Off-Chain Storage
+
+Currently, IPFS hashes are stored in **Supabase** (centralized database). Authorship is proven by:
+- Wallet signature during login
+- `author_wallet` field in database
+
+### Future: On-Chain Attestation
+
+<Info>
+  **Roadmap (Phase 2):** Stories will be anchored on **Base L2** blockchain:
+  - IPFS CID stored in smart contract
+  - Author wallet cryptographically linked on-chain
+  - Timestamp immutably recorded in block
+  
+  This enables third-party verification: "Did wallet 0xABC author this story at time T?"
+</Info>
+
+## Smart Contract Integration
+
+eStory uses Base Sepolia testnet (chain ID: 84532) for Web3 features:
+
+### Deployed Contracts
+
+| Contract | Purpose | Address |
+|----------|---------|----------|
+| **eStoryToken** | ERC20 $STORY token | `0xf9eDD76B...` |
+| **StoryNFT** | ERC721 story books | `0x6D37ebc5...` |
+| **PrivateVerifiedMetrics** | CRE-attested insights | `0x158e08BC...` |
+
+<Accordion title="How NFT Minting Works (Story Books)">
+  You can mint a **Story Book NFT** from multiple journal entries:
+  
+  1. Compile stories into a book (via `/api/book/compile`)
+  2. Upload book metadata to IPFS
+  3. Call `StoryNFT.mintBook()` with IPFS hash
+  4. Pay 0.001 ETH mint fee
+  5. Receive ERC721 token (tradable, provable ownership)
+  
+  **Code reference:** `/contracts/StoryNFT.sol`
+</Accordion>
+
+## IPFS Upload API
+
+### Endpoint
+
+```http
+POST /api/ipfs/upload
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "metadata": {
+    "title": "My Story",
+    "content": "...",
+    "author": "0x123..."
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "hash": "QmYwAPJzv5CZsnAzt8auVkN6TkTvZGKq9Xv7jvLZMrk8Lx",
+  "url": "https://gateway.pinata.cloud/ipfs/Qm..."
+}
+```
+
+### Rate Limits
+
+<Warning>
+  Pinata free tier: **1 GB storage + 100 pins/month**. Exceeding this will cause 402 Payment Required errors.
+</Warning>
+
+## Retrieving Your Stories from IPFS
+
+### Method 1: IPFS Gateway
+
+Visit any public gateway with your CID:
+
+```
+https://ipfs.io/ipfs/<your-CID>
+```
+
+**Response:** Raw JSON metadata.
+
+### Method 2: IPFS Desktop Client
+
+Install [IPFS Desktop](https://docs.ipfs.tech/install/ipfs-desktop/) and fetch:
+
+```bash
+ipfs cat <your-CID>
+```
+
+### Method 3: eStory Library
+
+Your stories are indexed in the app's **Library** page, with IPFS hashes stored in the database. Click any story to view its metadata including the IPFS link.
+
+## Storage Cost Breakdown
+
+| Component | Cost | Notes |
+|-----------|------|-------|
+| IPFS pinning (Pinata) | Free (1 GB limit) | Paid plans: $20/mo for 100 GB |
+| Supabase database | Free (500 MB limit) | Paid plans: $25/mo for 8 GB |
+| Supabase audio storage | Free (1 GB limit) | Paid plans: $25/mo for 100 GB |
+| Base L2 gas fees | ~$0.01 per tx | Only for future on-chain anchoring |
+
+<Tip>
+  For most users, the **free tier is sufficient** for 1000+ stories. Audio files (largest data) are stored in Supabase, not IPFS.
+</Tip>
+
+## Data Redundancy & Backup
+
+<AccordionGroup>
+  <Accordion title="What if Pinata shuts down?">
+    Your IPFS CID is stored in Supabase. You can:
+    1. Download the story JSON from the database
+    2. Re-pin it to a different IPFS service (e.g., Infura, Filebase)
+    3. Or host your own IPFS node
+    
+    The CID remains the same—IPFS is protocol-level, not vendor-locked.
+  </Accordion>
+
+  <Accordion title="What if Supabase data is lost?">
+    IPFS acts as your backup. If you have the CIDs, you can:
+    1. Query IPFS gateways to retrieve story metadata
+    2. Reconstruct your library from IPFS data
+    3. Re-import to a new database
+    
+    **Best practice:** Export your IPFS hashes periodically (future feature: one-click export).
+  </Accordion>
+
+  <Accordion title="Local Vault as third backup layer">
+    Stories saved while Vault is unlocked are also encrypted in **IndexedDB** (browser storage). This provides:
+    - Offline access
+    - Client-side encryption (AES-256-GCM)
+    - Instant retrieval without network calls
+    
+    See [Local Vault](/features/local-vault) for details.
+  </Accordion>
+</AccordionGroup>
+
+## Privacy Considerations
+
+<Warning>
+  **IPFS is public by design.** Anyone with your CID can read the content. For private stories:
+  
+  1. **Do not share the IPFS CID publicly**
+  2. Use **Local Vault** for encrypted local-only storage
+  3. Set `is_public: false` to hide from public feeds (database-level)
+  
+  Future enhancement: Encrypt story content before IPFS upload, storing only the ciphertext on-chain.
+</Warning>
+
+## Comparison: IPFS vs. Traditional Storage
+
+| Feature | IPFS (Decentralized) | AWS S3 (Centralized) |
+|---------|---------------------|----------------------|
+| Permanence | Forever (if pinned) | Until you pay bills |
+| Censorship | Resistant | Vulnerable |
+| Access control | Public by default | Granular permissions |
+| Cost | Pay for pinning | Pay for storage + bandwidth |
+| Speed | Varies by node | Fast, consistent |
+| Ownership | Cryptographic proof | AWS owns infrastructure |
+
+## Troubleshooting
+
+### "Failed to pin to IPFS"
+
+**Causes:**
+- Pinata API key missing/invalid
+- Rate limit exceeded
+- Network timeout
+
+**Solution:** Check server logs for Pinata API errors. Verify `PINATA_API_KEY` and `PINATA_API_SECRET` in `.env`.
+
+### Story shows "IPFS hash: null"
+
+**Cause:** IPFS upload failed but database save succeeded.
+
+**Solution:** This is a partial save. The story exists in Supabase but isn't decentralized. Re-save the story to retry IPFS upload.
+
+### Can't access IPFS gateway
+
+**Cause:** Gateway downtime or network blocking.
+
+**Solution:** Try alternative gateways:
+- `https://ipfs.io/ipfs/<CID>`
+- `https://cloudflare-ipfs.com/ipfs/<CID>`
+- `https://gateway.pinata.cloud/ipfs/<CID>`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Vault" icon="lock" href="/features/local-vault">
+    Add client-side encryption for true privacy before IPFS upload
+  </Card>
+  <Card title="Cognitive Insights" icon="brain" href="/features/cognitive-insights">
+    Extract AI insights from your blockchain-stored stories
+  </Card>
+  <Card title="Story Books (NFTs)" icon="book" href="/monetization/nft-minting">
+    Mint ERC721 NFTs from your IPFS-backed stories
+  </Card>
+</CardGroup>

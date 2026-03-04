@@ -1,0 +1,443 @@
+---
+title: Local Vault
+description: Encrypt private stories with military-grade AES-256 encryption in your browser
+icon: lock
+---
+
+## What is the Local Vault?
+
+The Local Vault is a **client-side encryption system** that stores your private stories in your browser's IndexedDB with **AES-256-GCM encryption**. Your stories are encrypted locally using a 6-digit PIN—no encryption keys ever leave your device. This provides an additional privacy layer beyond cloud storage.
+
+## Why Use the Local Vault?
+
+<CardGroup cols={2}>
+  <Card title="Zero-Knowledge Privacy" icon="eye-slash">
+    Even eStory servers can't read your vault stories. Encryption happens in your browser.
+  </Card>
+  <Card title="Offline Access" icon="wifi-slash">
+    Access encrypted stories without internet. Perfect for airplane mode or poor connectivity.
+  </Card>
+  <Card title="PIN-Protected" icon="key">
+    Only you can unlock the vault with your 6-digit PIN. Brute-force takes ~277 hours (100K PBKDF2 iterations).
+  </Card>
+  <Card title="Multi-Device Sync (Future)" icon="arrows-rotate">
+    Export encrypted vault backup to sync across devices (Phase 2 feature).
+  </Card>
+</CardGroup>
+
+## How Vault Encryption Works
+
+<Steps>
+  <Step title="First-Time Setup">
+    When you set a PIN:
+    
+    1. A random **DEK** (Data Encryption Key) is generated using `crypto.subtle.generateKey()`
+    2. Your PIN is stretched with **PBKDF2** (100,000 iterations + random salt) to create a **KEK** (Key Encryption Key)
+    3. The DEK is wrapped (encrypted) with the KEK using **AES-KW** (key wrapping)
+    4. The wrapped DEK and salt are stored in IndexedDB (table: `vaultKeys`)
+    
+    <Info>Your PIN never touches the disk. Only the salt and wrapped DEK are stored.</Info>
+  </Step>
+
+  <Step title="Unlocking the Vault">
+    When you enter your PIN:
+    
+    1. Your PIN + stored salt → PBKDF2 → KEK (re-derived)
+    2. KEK unwraps the wrapped DEK from IndexedDB
+    3. DEK is held **in memory only** (JavaScript variable)
+    4. Vault state: `unlocked`
+    
+    **Wrong PIN:** Unwrapping fails → Vault stays locked.
+  </Step>
+
+  <Step title="Encrypting a Story">
+    When you save a story while vault is unlocked:
+    
+    1. Title and content are encrypted with **AES-256-GCM** using the in-memory DEK
+    2. A fresh **random 12-byte IV** (initialization vector) is generated for each field
+    3. Ciphertext (base64) + IV (base64) stored in IndexedDB (table: `stories`)
+    4. A **SHA-256 checksum** of plaintext is stored for integrity verification
+    
+    **Result:** Story is unreadable without your PIN.
+  </Step>
+
+  <Step title="Decrypting a Story">
+    When you view a vault story:
+    
+    1. Ciphertext + IV retrieved from IndexedDB
+    2. Decrypted using the in-memory DEK
+    3. Checksum verified (detects tampering)
+    4. Plaintext displayed in UI
+    
+    <Warning>If vault is locked, stories appear as `[Encrypted]` placeholders.</Warning>
+  </Step>
+
+  <Step title="Locking the Vault">
+    When you lock or sign out:
+    
+    1. DEK is cleared from memory (JavaScript variable deleted)
+    2. Vault state: `locked`
+    3. Encrypted stories remain in IndexedDB but are inaccessible
+    
+    **Re-unlock:** Enter your PIN to re-derive KEK and unwrap DEK.
+  </Step>
+</Steps>
+
+## Encryption Specifications
+
+| Component | Algorithm | Strength |
+|-----------|-----------|----------|
+| **Data Encryption** | AES-256-GCM | 256-bit key (unbreakable with current tech) |
+| **Key Derivation** | PBKDF2-SHA256 | 100,000 iterations (10ms/guess) |
+| **Key Wrapping** | AES-KW (RFC 3394) | 256-bit KEK |
+| **Integrity** | GCM authentication tag | Detects tampering |
+| **Checksum** | SHA-256 | Verifies decryption correctness |
+
+### Why This Is Secure
+
+<Accordion title="256-bit AES is military-grade">
+  Used by governments for top-secret data. A brute-force attack would take **billions of years** even with supercomputers.
+</Accordion>
+
+<Accordion title="PBKDF2 slows down PIN cracking">
+  Each PIN guess takes 10ms (100K iterations). Testing all 1,000,000 possible 6-digit PINs takes **277 hours**.
+  
+  Compare to no PBKDF2: 1M guesses in ~1 second.
+</Accordion>
+
+<Accordion title="Fresh IV per encryption prevents pattern leaks">
+  Even if you encrypt the same story twice, ciphertexts are completely different (no pattern analysis).
+</Accordion>
+
+<Accordion title="GCM mode provides authenticated encryption">
+  Detects if ciphertext is modified. Decryption fails if data is tampered with.
+</Accordion>
+
+## Vault Setup Guide
+
+<Steps>
+  <Step title="Navigate to Vault Settings">
+    Click your profile icon → **Settings** → **Local Vault** tab.
+  </Step>
+
+  <Step title="Create a 6-Digit PIN">
+    Enter a memorable 6-digit PIN (e.g., `123456` for testing, but use a strong one in production).
+    
+    <Warning>
+      **If you forget your PIN, your vault stories are permanently lost.** There is no recovery mechanism—this is the security tradeoff.
+    </Warning>
+  </Step>
+
+  <Step title="Confirm PIN">
+    Re-enter your PIN to confirm. Click **Setup Vault**.
+  </Step>
+
+  <Step title="Vault Created">
+    You'll see a success message: **"Vault setup complete!"**
+    
+    Vault state: `setup` + `unlocked` (DEK in memory).
+  </Step>
+
+  <Step title="Save Stories to Vault">
+    From now on, all stories you save (with `is_public: false`) are **automatically encrypted** to the vault if it's unlocked.
+    
+    <Tip>You can also manually save public stories to the vault for offline access.</Tip>
+  </Step>
+</Steps>
+
+## Using the Vault
+
+### Unlocking
+
+1. Click **Unlock Vault** button
+2. Enter your 6-digit PIN
+3. If correct: Vault unlocks, encrypted stories become readable
+4. If wrong: Error message: `"Incorrect PIN"`
+
+**Auto-lock:** Vault locks when you:
+- Sign out
+- Close the browser tab (DEK is in-memory only)
+- Click **Lock Vault** button
+
+### Viewing Encrypted Stories
+
+**Vault Locked:**
+- Stories show `[Encrypted]` in title/content preview
+- Click to unlock prompts you for PIN
+
+**Vault Unlocked:**
+- Stories decrypt automatically in real-time
+- Fetched via `useLocalStories()` hook (reactive Dexie query)
+
+### Changing Your PIN
+
+<Steps>
+  <Step title="Unlock Vault First">
+    You must be unlocked to change the PIN (requires current DEK in memory).
+  </Step>
+  
+  <Step title="Go to Settings → Change PIN">
+    Enter:
+    - **Current PIN** (verified against stored hash)
+    - **New PIN** (6 digits)
+    - **Confirm New PIN**
+  </Step>
+  
+  <Step title="Re-Wrapping Process">
+    1. Current PIN + old salt → KEK (old)
+    2. KEK unwraps DEK (verifies you know current PIN)
+    3. New PIN + new salt → KEK (new)
+    4. KEK (new) wraps DEK
+    5. New salt + new wrapped DEK stored in IndexedDB
+    
+    **Result:** Same DEK, different wrapper. Your encrypted stories remain intact.
+  </Step>
+</Steps>
+
+**Code reference:** `/lib/vault/keyManager.ts:145-181`
+
+## Vault Database Schema
+
+### `vaultKeys` Table
+
+```typescript
+interface VaultKeyRecord {
+  userId: string;           // Primary key
+  salt: string;             // PBKDF2 salt (base64)
+  wrapped_dek: string;      // AES-KW wrapped DEK (base64)
+  pin_hash: string;         // SHA-256 PIN hash (quick verification)
+  created_at: string;       // ISO timestamp
+}
+```
+
+### `stories` Table
+
+```typescript
+interface LocalStoryRecord {
+  localId: string;          // Primary key (UUID)
+  userId: string;
+  encrypted_title: string;  // Base64 ciphertext
+  title_iv: string;         // Base64 IV
+  encrypted_content: string;
+  content_iv: string;
+  checksum: string;         // SHA-256 hash of plaintext
+  cloud_id?: string;        // Linked Supabase story ID
+  sync_status: 'local' | 'pending' | 'synced' | 'error';
+  is_public: boolean;
+  story_date: string;       // User-selected memory date
+  created_at: string;
+  updated_at: string;
+}
+```
+
+**Indexes:**
+- `localId` (primary)
+- `userId` (filter by user)
+- `sync_status` (pending uploads)
+- `cloud_id` (link to Supabase)
+
+## Dual-Write: Cloud + Vault
+
+When you save a story, it's written to **both** Supabase and Vault:
+
+```typescript
+// 1. Save to Supabase (plaintext, protected by RLS)
+const { story } = await fetch('/api/stories', {
+  method: 'POST',
+  body: JSON.stringify({ title, content, is_public })
+})
+
+// 2. Save to Vault (encrypted, if unlocked)
+if (vaultUnlocked) {
+  const encTitle = await encryptString(title, dek)
+  const encContent = await encryptString(content, dek)
+  await db.stories.put({
+    localId: crypto.randomUUID(),
+    encrypted_title: encTitle.ciphertext,
+    title_iv: encTitle.iv,
+    encrypted_content: encContent.ciphertext,
+    content_iv: encContent.iv,
+    cloud_id: story.id,
+    sync_status: 'synced'
+  })
+}
+```
+
+**Result:**
+- **Cloud copy:** Accessible from any device, searchable, shareable
+- **Vault copy:** Offline-first, encrypted, survives cloud outages
+
+**Code reference:** `/app/record/RecordPageClient.tsx:394-427`
+
+## Vault Sync Status
+
+Each vault story has a `sync_status` field:
+
+| Status | Meaning |
+|--------|----------|
+| `local` | Saved only to vault (not uploaded to cloud yet) |
+| `pending` | Queued for cloud upload |
+| `synced` | Successfully saved to both vault and Supabase |
+| `error` | Cloud upload failed (retryable) |
+
+**Future feature:** Background sync worker to upload `pending` stories when online.
+
+## Vault UI Components
+
+### `<VaultGuard>` Wrapper
+
+Wrap any component to handle vault states:
+
+```tsx
+import { VaultGuard } from '@/components/vault/VaultGuard'
+
+<VaultGuard fallback={<p>Vault is locked</p>}>
+  <EncryptedStoryList />
+</VaultGuard>
+```
+
+**Behavior:**
+- **Not setup:** Shows setup instructions
+- **Locked:** Shows unlock prompt
+- **Unlocked:** Renders children
+
+### `useLocalStories()` Hook
+
+Reactive hook for vault CRUD:
+
+```tsx
+import { useLocalStories } from '@/app/hooks/useLocalStories'
+
+const { stories, isLoading } = useLocalStories(userId)
+
+// Stories auto-decrypt if vault is unlocked
+```
+
+**Returns:**
+- `stories`: Array of decrypted `LocalStoryRecord`
+- `isLoading`: Boolean (IndexedDB query in progress)
+- Auto-updates when vault unlocks/locks (reactive via Dexie `useLiveQuery`)
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Choose a Strong PIN">
+    **Weak:** `123456`, `000000`, birthdate
+    
+    **Strong:** Random 6 digits from password manager (e.g., `847293`)
+    
+    With 100K PBKDF2 iterations, a random 6-digit PIN takes ~277 hours to brute-force.
+  </Accordion>
+
+  <Accordion title="Lock Vault When Not in Use">
+    Click **Lock Vault** in settings before stepping away from your device.
+    
+    This clears the DEK from memory—even if someone accesses your browser, they can't read vault stories without your PIN.
+  </Accordion>
+
+  <Accordion title="Backup Your Vault (Phase 2)">
+    Future feature: Export encrypted vault backup to another device.
+    
+    Current limitation: Vault is tied to one browser. Clearing browser data = vault lost.
+  </Accordion>
+
+  <Accordion title="Never Share Your PIN">
+    Treat your PIN like a password. eStory never asks for it (all operations are local).
+  </Accordion>
+</AccordionGroup>
+
+## Limitations & Tradeoffs
+
+<Warning>
+  **No PIN Recovery**
+  
+  If you forget your PIN, your vault stories are **permanently inaccessible**. This is by design—zero-knowledge encryption means we can't reset it for you.
+  
+  **Mitigation:** Also save important stories to the cloud (public or private with RLS protection).
+</Warning>
+
+<Warning>
+  **Single-Device Only (for now)**
+  
+  Vault is stored in browser IndexedDB. Clearing browser data deletes it. Switching devices requires manual export/import (coming in Phase 2).
+</Warning>
+
+<Info>
+  **Vault is Additive, Not Required**
+  
+  You can use eStory without ever setting up a vault. Cloud storage (Supabase) is the primary system. Vault is an optional privacy enhancement.
+</Info>
+
+## Troubleshooting
+
+### "Vault is locked — unlock with PIN first"
+
+**Cause:** DEK is not in memory (vault locked or you just reopened the browser).
+
+**Solution:** Click **Unlock Vault** and enter your PIN.
+
+---
+
+### "Incorrect PIN" on unlock
+
+**Cause:** Wrong PIN entered.
+
+**Solution:** Try again. After 3 failed attempts, wait 30 seconds (future rate limiting).
+
+---
+
+### Vault stories disappeared after clearing browser data
+
+**Cause:** IndexedDB is browser storage—clearing "site data" deletes it.
+
+**Solution:** None (data is lost). Future feature: cloud backup of encrypted vault.
+
+**Prevention:** Don't clear browser data, or export vault backup first.
+
+---
+
+### "Decryption failed" on viewing story
+
+**Cause:** Ciphertext corrupted or checksum mismatch.
+
+**Solution:** This is rare (indicates storage corruption). Try re-saving the story from cloud copy.
+
+## Privacy Comparison
+
+| Feature | Cloud Storage (Supabase) | Local Vault (IndexedDB) |
+|---------|-------------------------|-------------------------|
+| **Encryption** | Database-level (at rest) | AES-256-GCM (client-side) |
+| **Access Control** | RLS policies (DB rules) | PIN-protected (your device) |
+| **Server Visibility** | Admins can read plaintext | Encrypted blobs (unreadable) |
+| **Offline Access** | No (requires network) | Yes (IndexedDB is local) |
+| **Multi-Device** | Yes (sync via cloud) | No (single browser) |
+| **Backup** | Automatic (Supabase backups) | Manual export (coming soon) |
+| **Recovery** | Email/wallet reset | None (PIN forgotten = lost) |
+
+**Best Practice:** Use both—cloud for accessibility, vault for privacy.
+
+## Code References
+
+| File | Purpose |
+|------|----------|
+| `/lib/vault/crypto.ts` | AES-GCM encryption, PBKDF2 derivation |
+| `/lib/vault/keyManager.ts` | Setup, unlock, lock, PIN change |
+| `/lib/vault/db.ts` | Dexie schema (IndexedDB) |
+| `/lib/vault/index.ts` | Public API exports |
+| `/components/vault/VaultGuard.tsx` | UI wrapper for vault states |
+| `/app/hooks/useLocalStories.ts` | Reactive vault CRUD hook |
+| `/app/record/RecordPageClient.tsx:394` | Dual-write (cloud + vault) |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Voice Journaling" icon="mic" href="/features/voice-journaling">
+    Record stories that auto-encrypt to vault when saved privately
+  </Card>
+  <Card title="Blockchain Storage" icon="link" href="/features/blockchain-storage">
+    Understand how cloud stories are pinned to IPFS for permanence
+  </Card>
+  <Card title="Profile Settings" icon="arrows-rotate" href="/user-guide/profile-settings">
+    Export and import vault backups across devices (Phase 2)
+  </Card>
+</CardGroup>

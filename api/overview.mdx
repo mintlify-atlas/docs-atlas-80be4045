@@ -1,0 +1,171 @@
+---
+title: 'API Overview'
+description: 'Complete reference for the iStory REST API'
+icon: 'code'
+---
+
+## Introduction
+
+The iStory API provides a comprehensive REST interface for building Web3-powered voice journaling applications. All endpoints require authentication and are protected by rate limiting.
+
+## Base URL
+
+```
+https://istory.vercel.app/api
+```
+
+For local development:
+```
+http://localhost:3000/api
+```
+
+## Authentication
+
+All API endpoints require a Bearer token in the `Authorization` header. iStory supports two authentication methods:
+
+1. **Wallet Authentication** (custom JWT)
+2. **Google OAuth** (Supabase session JWT)
+
+See [Authentication](/api/authentication) for detailed implementation.
+
+## Rate Limits
+
+API routes are protected by a rate limiting middleware with route-specific limits:
+
+| Route Pattern | Limit | Window |
+|--------------|-------|--------|
+| `/api/ai/*` | 10 requests | 1 minute |
+| `/api/auth/*` | 20 requests | 1 minute |
+| `/api/email/send` | 5 requests | 1 minute |
+| `/api/cre/callback` | 30 requests | 1 minute |
+| `/api/waitlist` | 10 requests | 1 minute |
+| All other `/api/*` | 60 requests | 1 minute |
+
+Rate limit information is returned in response headers:
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 59
+```
+
+When rate limited, the API returns:
+```json
+{
+  "error": "Too many requests. Please try again later."
+}
+```
+Status: `429 Too Many Requests`  
+Headers: `Retry-After: 60`
+
+## CORS
+
+The API supports cross-origin requests from these origins:
+- `http://localhost:8081` (Expo dev)
+- `http://localhost:19006` (Expo web)
+- `http://localhost:3000` (Next.js dev)
+- `https://e-story-dapp.vercel.app`
+- `https://istory.vercel.app`
+
+Allowed methods: `GET, POST, PUT, DELETE, PATCH, OPTIONS`  
+Allowed headers: `Content-Type, Authorization`
+
+## Response Format
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "data": { /* response data */ }
+}
+```
+
+### Error Response
+
+```json
+{
+  "error": "Human-readable error message"
+}
+```
+
+<Note>
+Error messages never leak internal implementation details or stack traces.
+</Note>
+
+## Status Codes
+
+| Code | Meaning |
+|------|----------|
+| `200` | Success |
+| `400` | Bad Request - Invalid input |
+| `401` | Unauthorized - Missing or invalid token |
+| `403` | Forbidden - Insufficient permissions |
+| `404` | Not Found |
+| `409` | Conflict - Duplicate resource or concurrent operation |
+| `422` | Unprocessable Entity - Valid format but semantic error |
+| `429` | Too Many Requests - Rate limit exceeded |
+| `500` | Internal Server Error |
+| `502` | Bad Gateway - External service error |
+
+## API Sections
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Wallet signature and OAuth login flows
+  </Card>
+  <Card title="AI Endpoints" icon="sparkles" href="/api/ai-endpoints">
+    Transcription, enhancement, analysis, and reflections
+  </Card>
+  <Card title="Story Endpoints" icon="book" href="/api/story-endpoints">
+    Create, read, and manage journal entries
+  </Card>
+  <Card title="Social Endpoints" icon="users" href="/api/social-endpoints">
+    Likes, follows, and social interactions
+  </Card>
+</CardGroup>
+
+## Security
+
+The API implements a layered security model:
+
+**Layer 0:** Security headers (CSP, X-Frame-Options, CORS)  
+**Layer 1:** Rate limiting (route-specific)  
+**Layer 2:** Bearer token authentication  
+**Layer 3:** Input validation (size limits, MIME types, text length)  
+**Layer 4:** Ownership verification (users can only modify their own resources)
+
+<Warning>
+Never expose your `SUPABASE_SERVICE_ROLE_KEY` or `JWT_SECRET` in client-side code.
+</Warning>
+
+## SDK Support
+
+### JavaScript/TypeScript
+
+```typescript
+const response = await fetch('https://istory.vercel.app/api/stories', {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+const data = await response.json();
+```
+
+### cURL
+
+```bash
+curl -X GET https://istory.vercel.app/api/stories \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication Guide" icon="shield" href="/api/authentication">
+    Learn how to authenticate with wallet signatures
+  </Card>
+  <Card title="AI Integration" icon="robot" href="/api/ai-endpoints">
+    Integrate voice transcription and AI analysis
+  </Card>
+</CardGroup>

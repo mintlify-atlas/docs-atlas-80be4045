@@ -1,0 +1,386 @@
+---
+title: 'Recording Stories'
+description: 'Capture your memories with voice recording, AI transcription, and blockchain permanence'
+icon: 'microphone'
+---
+
+## Overview
+
+The **Record** page is your creative workspace for capturing personal narratives. Speak naturally, and iStory's AI handles transcription, enhancement, and permanent storage on IPFS.
+
+<Info>
+  **Tech Stack:** ElevenLabs Scribe (transcription) → Google Gemini 2.5 Flash (enhancement) → IPFS (permanent storage) → Supabase (metadata)
+</Info>
+
+## Quick Start
+
+<Steps>
+  <Step title="Navigate to Record Page">
+    Click **Record** in the main navigation or visit `/record`.
+  </Step>
+
+  <Step title="Grant Microphone Permission">
+    Your browser will prompt for microphone access. Click **Allow** to enable voice recording.
+  </Step>
+
+  <Step title="Start Recording">
+    Tap the large circular **microphone button**. Speak clearly and naturally—AI transcription handles multi-language input.
+  </Step>
+
+  <Step title="Stop & Review">
+    Tap the **square stop button** when finished. Transcribed text appears in the content area within seconds.
+  </Step>
+
+  <Step title="Save Your Story">
+    Add a title, set visibility (Public/Private), and click **Save Privately** or **Publish & Save**.
+  </Step>
+</Steps>
+
+## Recording Interface
+
+### Voice Recording (app/record/RecordPageClient.tsx:140-188)
+
+<Accordion title="Recording Controls">
+  **Microphone Button States:**
+  
+  | State | Visual | Behavior |
+  |-------|--------|----------|
+  | **Idle** | Blue gradient with pulse glow | Click to start recording |
+  | **Recording** | Red gradient with animated rings | Click to stop recording |
+  | **Processing** | Disabled (gray) | Cannot record during transcription/enhancement |
+  
+  **Audio Settings:**
+  - Sample Rate: 16 kHz (optimized for speech)
+  - Echo Cancellation: Enabled
+  - Noise Suppression: Enabled
+  - Format: WebM (browser native)
+  
+  <Warning>
+    Recordings are stored temporarily in memory. **Do not close the tab** before saving!
+  </Warning>
+</Accordion>
+
+### AI Transcription (app/record/RecordPageClient.tsx:191-241)
+
+<Accordion title="How Transcription Works">
+  **Automatic Processing:**
+  
+  1. **Audio Upload**: Recording sent to `/api/ai/transcribe` as multipart form-data
+  2. **ElevenLabs Scribe**: Processes audio with speaker diarization and punctuation
+  3. **Text Return**: Transcribed text appears in textarea (appends to existing content)
+  4. **Auto-Title**: If no title set, generates "Journal Entry - {date}"
+  
+  **Loading States** (separate from saving):
+  - `isTranscribing`: Shows "AI is transcribing..." badge
+  - `isBusy`: Disables mic button while processing
+  - Transcription badge disappears when complete
+  
+  <Info>
+    **Multi-Language Support**: Transcription auto-detects language. Supports 30+ languages including English, Spanish, French, German, Japanese, and Chinese.
+  </Info>
+  
+  **Error Handling:**
+  - Empty transcription → Toast error: "Transcription returned empty text"
+  - API failure → Toast shows error message from server
+  - Network timeout → Automatic retry after 30 seconds
+</Accordion>
+
+## Content Management
+
+### Entry Details Form (app/record/RecordPageClient.tsx:628-698)
+
+<Steps>
+  <Step title="Title Field">
+    Give your story a memorable title. Auto-populated as "Journal Entry - {date}" after first recording.
+    
+    <Tip>
+      Use descriptive titles for easier searching: "Trip to Tokyo - Day 1" instead of "Journal Entry".
+    </Tip>
+  </Step>
+
+  <Step title="Date of Memory">
+    **Backdating feature**: Set the date this memory occurred (defaults to today).
+    
+    **How it works:**
+    - `story_date`: User-selected date (what the story is about)
+    - `created_at`: System timestamp (when you saved it)
+    - Library groups by `story_date` for chronological browsing
+    
+    <Info>
+      Perfect for journaling about past events or importing old memories.
+    </Info>
+  </Step>
+
+  <Step title="Visibility Toggle">
+    Control who can see your story:
+    
+    | Setting | Icon | Behavior |
+    |---------|------|----------|
+    | **Private** (default) | 🔒 Lock | Only you can access. Not shown on social feed. |
+    | **Public** | 🌍 Unlock | Visible on social feed. Others can like and comment. |
+    
+    <Warning>
+      Changing to Public **cannot be undone** after saving. Choose carefully.
+    </Warning>
+  </Step>
+</Steps>
+
+### Content Editing (app/record/RecordPageClient.tsx:741-800)
+
+<Accordion title="Text Enhancement with AI">
+  **Gemini 2.5 Flash Enhancement:**
+  
+  Click **Enhance with AI** to improve your transcription:
+  - Fixes grammar and punctuation
+  - Improves sentence flow and clarity
+  - Maintains your original voice and meaning
+  - Adds paragraph breaks for readability
+  
+  **Revert Feature:**
+  Original text is saved to `preEnhanceText` state. Click **Revert** to undo enhancement.
+  
+  <Tip>
+    Enhancement is optional. Raw transcriptions are often more authentic.
+  </Tip>
+</Accordion>
+
+<Accordion title="Read Aloud (Text-to-Speech)">
+  Click **Read Aloud** to hear your story via browser TTS:
+  - Uses system voice (configurable in OS settings)
+  - Playback controls: Play/Stop
+  - No internet required (runs locally)
+  
+  <Info>
+    Useful for proofreading—hearing errors you might miss when reading.
+  </Info>
+</Accordion>
+
+<Accordion title="Manual Editing">
+  **Direct Text Input:**
+  - Type or paste content directly into textarea
+  - Supports markdown-style formatting (rendered on story detail page)
+  - No character limit (reasonable limit: ~50,000 chars for IPFS metadata)
+  
+  **Draft Auto-Save:**
+  - Saves to `sessionStorage.estory_record_draft` every 500ms
+  - Restored on page reload
+  - Cleared after successful save
+  
+  <Warning>
+    Drafts are **session-specific**. Opening in new tab starts fresh draft.
+  </Warning>
+</Accordion>
+
+## Saving & Storage
+
+### Save Process (app/record/RecordPageClient.tsx:309-466)
+
+<Steps>
+  <Step title="Validation">
+    **Pre-save checks:**
+    - User is authenticated (`authInfo.id` exists)
+    - Title is not empty
+    - Content is not empty
+    - Not already saving (`isSaving` state)
+    
+    Save button is disabled until all conditions met.
+  </Step>
+
+  <Step title="Audio Upload (Optional)">
+    If you recorded audio:
+    
+    1. Audio blob sent to `/api/audio/upload` as `multipart/form-data`
+    2. Uploaded to Supabase Storage bucket: `story_audio`
+    3. Public URL returned: `https://{project}.supabase.co/storage/v1/object/public/story_audio/{userId}/{filename}.webm`
+    4. Stored in `audio_url` field
+    
+    <Info>
+      Audio upload uses **Bearer token auth** to bypass RLS—works for wallet and OAuth users.
+    </Info>
+  </Step>
+
+  <Step title="IPFS Upload (Permanent Record)">
+    **Immutable Metadata:**
+    
+    ```json
+    {
+      "title": "My Story Title",
+      "content": "Full story text...",
+      "author": "0xYourWalletAddress",
+      "audio": "https://...audio.webm",
+      "date": "2026-03-04",
+      "timestamp": "2026-03-04T10:30:00.000Z",
+      "is_public": false,
+      "app": "EStory DApp"
+    }
+    ```
+    
+    - Pinned to IPFS via Pinata API
+    - Returns IPFS hash (e.g., `QmX...`)
+    - Stored in `ipfs_hash` column
+    
+    <Warning>
+      IPFS uploads are **permanent and immutable**. Cannot be edited or deleted.
+    </Warning>
+  </Step>
+
+  <Step title="Database Save">
+    Story saved to `stories` table via `/api/stories` POST:
+    
+    **Key Fields:**
+    - `author_id`: Your user ID (UUID)
+    - `author_wallet`: Your wallet address (if linked)
+    - `title`, `content`: Story data
+    - `has_audio`: Boolean flag
+    - `audio_url`: Supabase storage URL
+    - `ipfs_hash`: Permanent content address
+    - `is_public`: Visibility setting
+    - `created_at`: System timestamp (when saved)
+    - `story_date`: User-selected date (when memory occurred)
+    
+    <Info>
+      API route uses **RLS bypass** via service role key—ensures wallet users can save.
+    </Info>
+  </Step>
+
+  <Step title="Local Vault Encryption (Optional)">
+    If you have vault enabled and unlocked:
+    
+    **Encrypted Local Copy:**
+    - Title and content encrypted with AES-256-GCM
+    - DEK (Data Encryption Key) retrieved from memory
+    - Stored in IndexedDB `vault.stories` table
+    - Linked to cloud via `cloud_id` field
+    - Marked as `synced` status
+    
+    <Tip>
+      Vault save is **non-blocking**. Failure won't prevent cloud save success.
+    </Tip>
+  </Step>
+
+  <Step title="Background AI Analysis (Fire-and-Forget)">
+    After save succeeds, triggers `/api/ai/analyze` in background:
+    - Extracts themes, life domains, sentiment
+    - Generates brief insight
+    - Saves to `story_metadata` table
+    - Used for patterns tab in library
+    
+    <Info>
+      Analysis happens asynchronously. Results appear 5-10 seconds after saving.
+    </Info>
+  </Step>
+</Steps>
+
+### Three Loading States (app/record/RecordPageClient.tsx:79-86)
+
+<Warning>
+  **Important:** iStory uses **separate loading states** for different operations.
+</Warning>
+
+```typescript
+const isTranscribing = ...; // ElevenLabs processing audio
+const isEnhancing = ...;    // Gemini improving text
+const isSaving = ...;       // Cloud + IPFS + vault save
+
+const isBusy = isTranscribing || isEnhancing || isSaving;
+```
+
+**UI Behavior:**
+- Mic button disabled when `isBusy` (any operation active)
+- Save button shows spinner only during `isSaving`
+- Separate badges show transcription/enhancement progress
+
+## Recording Tips
+
+<CardGroup cols={2}>
+  <Card title="Speak Clearly and Moderately" icon="volume">
+    - Find a quiet environment
+    - Speak at normal conversational pace
+    - Avoid mumbling or speaking too fast
+    - Position microphone 6-12 inches from mouth
+  </Card>
+  
+  <Card title="Edit Before Saving" icon="pencil">
+    - Review transcription for accuracy
+    - Fix any misheard words
+    - Use AI enhancement for polish
+    - Add formatting (paragraphs, emphasis)
+  </Card>
+  
+  <Card title="Stories Saved Securely" icon="shield-check">
+    - IPFS ensures permanent availability
+    - Blockchain-grade immutability
+    - Supabase provides fast access
+    - Optional vault encryption for privacy
+  </Card>
+  
+  <Card title="Backdating for Journaling" icon="calendar">
+    - Set story_date to when event occurred
+    - Perfect for importing old journals
+    - Library organizes by story_date
+    - Created_at tracks actual save time
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Microphone access denied">
+    **Browser blocked microphone permission**
+    
+    **Solution:**
+    1. Click padlock icon in address bar
+    2. Find "Microphone" permission
+    3. Change to "Allow"
+    4. Refresh page and try again
+    
+    **Chrome:** `chrome://settings/content/microphone`
+    **Firefox:** Click "i" icon → Permissions → Microphone
+  </Accordion>
+
+  <Accordion title="Transcription returns empty text">
+    **Possible causes:**
+    - Audio too quiet or muffled
+    - Recording too short (< 1 second)
+    - Background noise too loud
+    - ElevenLabs API timeout
+    
+    **Solution:**
+    1. Check microphone is working (test in system settings)
+    2. Record for at least 3 seconds
+    3. Reduce background noise
+    4. Try manual text input instead
+  </Accordion>
+
+  <Accordion title="Save fails with 'User ID missing'">
+    **Authentication expired**
+    
+    **Solution:**
+    1. Check if you're still signed in (look for wallet address/avatar in nav)
+    2. If not, sign in again
+    3. Your draft should be preserved in sessionStorage
+    4. Try saving again
+  </Accordion>
+
+  <Accordion title="Draft lost after closing tab">
+    **sessionStorage is tab-specific**
+    
+    **Prevention:**
+    - Enable local vault for auto-save
+    - Copy important content to notes app
+    - Use browser's "Restore tabs" feature
+    - Don't close tab until save confirms
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="View Your Library" icon="book" href="/user-guide/library-management">
+    Browse your stories organized by month, explore patterns, and compile books.
+  </Card>
+  
+  <Card title="Enable Local Vault" icon="vault" href="/features/local-vault">
+    Add client-side encryption for maximum privacy.
+  </Card>
+</CardGroup>

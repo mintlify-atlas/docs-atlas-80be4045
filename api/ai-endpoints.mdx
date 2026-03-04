@@ -1,0 +1,569 @@
+---
+title: 'AI Endpoints'
+description: 'Voice transcription, text enhancement, story analysis, and weekly reflections'
+icon: 'sparkles'
+---
+
+## Overview
+
+iStory's AI endpoints power the core journaling experience:
+
+- **Transcription** - Convert voice recordings to text (ElevenLabs Scribe)
+- **Enhancement** - Improve grammar and flow (Gemini 2.5 Flash)
+- **Analysis** - Extract themes and insights (Gemini 2.5 Flash)
+- **Reflection** - Generate weekly summaries (Gemini 2.5 Flash)
+
+<Note>
+All AI endpoints require authentication and are rate limited to **10 requests per minute**.
+</Note>
+
+---
+
+## Transcribe Audio
+
+<api-endpoint>
+  POST /api/ai/transcribe
+</api-endpoint>
+
+Convert audio files to text using ElevenLabs Scribe model.
+
+### Request
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="File" required>
+  Audio file (max 25MB)
+  
+  **Supported formats:**
+  - `audio/webm`, `audio/wav`, `audio/mp3`, `audio/mpeg`
+  - `audio/ogg`, `audio/flac`, `audio/m4a`, `audio/mp4`
+  - `audio/x-m4a`, `audio/aac`, `video/webm`
+</ParamField>
+
+### Response
+
+<ResponseField name="text" type="string">
+  Transcribed text from the audio file
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/ai/transcribe \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@recording.webm"
+```
+
+```typescript TypeScript
+const formData = new FormData();
+formData.append('file', audioBlob, 'recording.webm');
+
+const response = await fetch('https://istory.vercel.app/api/ai/transcribe', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${token}` },
+  body: formData
+});
+
+const { text } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "text": "Today was an incredible day. I finally finished the project I've been working on for months, and the client loved it. Feeling grateful and accomplished."
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request - No File">
+```json
+{ "error": "No audio file provided" }
+```
+</Expandable>
+
+<Expandable title="400 Bad Request - File Too Large">
+```json
+{ "error": "File too large. Maximum size is 25MB." }
+```
+</Expandable>
+
+<Expandable title="400 Bad Request - Invalid Type">
+```json
+{ "error": "Invalid file type. Only audio files are accepted." }
+```
+</Expandable>
+
+<Expandable title="422 Unprocessable Entity">
+```json
+{ "error": "Transcription returned empty result. Please try again." }
+```
+This can occur with very short recordings or pure silence.
+</Expandable>
+
+<Expandable title="502 Bad Gateway">
+```json
+{ "error": "Transcription service authentication failed. Please check server configuration." }
+```
+Indicates an issue with the ElevenLabs API key.
+</Expandable>
+
+### Implementation Details
+
+```typescript
+// Features enabled:
+modelId: "scribe_v1"
+tagAudioEvents: true      // Detects laughter, pauses, etc.
+languageCode: "eng"       // English
+diarize: false            // Single speaker
+```
+
+---
+
+## Enhance Text
+
+<api-endpoint>
+  POST /api/ai/enhance
+</api-endpoint>
+
+Improve grammar, spelling, and flow while preserving the original meaning.
+
+### Request Body
+
+<ParamField body="text" type="string" required>
+  Raw text to enhance (max 50,000 characters)
+</ParamField>
+
+### Response
+
+<ResponseField name="text" type="string">
+  Enhanced text with improved grammar and vocabulary
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/ai/enhance \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "today i went to the store and bought some stuff it was good"}'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/ai/enhance', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ text: rawText })
+});
+
+const { text: enhanced } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "text": "Today, I went to the store and bought some supplies. It was a pleasant experience."
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request - No Text">
+```json
+{ "error": "No text provided" }
+```
+</Expandable>
+
+<Expandable title="400 Bad Request - Text Too Long">
+```json
+{ "error": "Text exceeds maximum length of 50000 characters" }
+```
+</Expandable>
+
+### Enhancement Guidelines
+
+The AI is instructed to:
+- Fix grammar and spelling errors
+- Improve flow and vocabulary
+- **Keep the original personal tone**
+- **Not change the underlying meaning**
+- **Not add fictional events**
+
+<Warning>
+The enhanced text may be shorter or longer than the original, but the meaning remains intact.
+</Warning>
+
+---
+
+## Analyze Story
+
+<api-endpoint>
+  POST /api/ai/analyze
+</api-endpoint>
+
+Extract structured metadata and insights from a journal entry.
+
+### Request Body
+
+<ParamField body="storyId" type="string" required>
+  UUID of the story to analyze
+</ParamField>
+
+<ParamField body="storyText" type="string" required>
+  Full story content (min 50, max 10,000 characters)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful analysis
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Structured metadata saved to database
+  <Expandable title="metadata fields">
+    <ResponseField name="themes" type="string[]">
+      1-5 key themes (e.g., `["growth", "family", "resilience"]`)
+    </ResponseField>
+    <ResponseField name="emotional_tone" type="string">
+      One of: `reflective`, `joyful`, `anxious`, `hopeful`, `melancholic`, `grateful`, `frustrated`, `peaceful`, `excited`, `uncertain`, `neutral`
+    </ResponseField>
+    <ResponseField name="life_domain" type="string">
+      One of: `work`, `relationships`, `health`, `identity`, `growth`, `creativity`, `spirituality`, `family`, `adventure`, `learning`, `general`
+    </ResponseField>
+    <ResponseField name="intensity_score" type="number">
+      Emotional intensity (0.0-1.0)
+    </ResponseField>
+    <ResponseField name="significance_score" type="number">
+      Life story importance (0.0-1.0)
+    </ResponseField>
+    <ResponseField name="people_mentioned" type="string[]">
+      Names of people mentioned
+    </ResponseField>
+    <ResponseField name="places_mentioned" type="string[]">
+      Specific locations mentioned
+    </ResponseField>
+    <ResponseField name="time_references" type="string[]">
+      Time phrases (e.g., `["last summer", "when I was 12"]`)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="insight" type="string">
+  One-sentence compassionate observation about the story's meaning
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/ai/analyze \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storyId": "123e4567-e89b-12d3-a456-426614174000",
+    "storyText": "Today I had an important conversation with my mom about my career. She finally understood why I left my corporate job to pursue my passion for art. It felt liberating."
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/ai/analyze', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ storyId, storyText })
+});
+
+const { metadata, insight } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "metadata": {
+    "themes": ["family", "identity", "freedom", "career"],
+    "emotional_tone": "hopeful",
+    "life_domain": "relationships",
+    "intensity_score": 0.75,
+    "significance_score": 0.85,
+    "people_mentioned": ["mom"],
+    "places_mentioned": [],
+    "time_references": ["today"],
+    "brief_insight": "This represents a significant breakthrough in family communication and personal authenticity."
+  },
+  "insight": "This represents a significant breakthrough in family communication and personal authenticity."
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request - Missing Fields">
+```json
+{ "error": "Missing required fields: storyId and storyText" }
+```
+</Expandable>
+
+<Expandable title="400 Bad Request - Content Too Short">
+```json
+{ "error": "Story text must be at least 50 characters" }
+```
+</Expandable>
+
+<Expandable title="403 Forbidden">
+```json
+{ "error": "Forbidden" }
+```
+You can only analyze your own stories.
+</Expandable>
+
+<Expandable title="409 Conflict">
+```json
+{ "error": "Analysis already in progress for this story" }
+```
+Prevents concurrent analysis requests for the same story.
+</Expandable>
+
+<Expandable title="429 Too Many Requests">
+```json
+{ "error": "Rate limit exceeded. Please try again later." }
+```
+Headers: `Retry-After: 60`  
+Limit: 30 requests per minute per story.
+</Expandable>
+
+### Performance
+
+- **Retry logic:** 3 attempts with exponential backoff (1s, 2s, 4s)
+- **Truncation:** Content >10,000 characters is truncated at word boundary
+- **Timeout handling:** Automatic retry on Gemini API timeouts
+
+<Note>
+Analysis is typically triggered automatically when saving a story via `/api/journal/save`.
+</Note>
+
+---
+
+## Generate Weekly Reflection
+
+<api-endpoint>
+  POST /api/ai/reflection
+</api-endpoint>
+
+Generate a compassionate summary of the user's journal entries from the past week.
+
+### Request Body
+
+<ParamField body="userId" type="string" required>
+  User ID (UUID)
+</ParamField>
+
+<ParamField body="userWallet" type="string" required>
+  User's Ethereum address
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful generation
+</ResponseField>
+
+<ResponseField name="reflection" type="object">
+  Weekly reflection object
+  <Expandable title="reflection fields">
+    <ResponseField name="reflection_text" type="string">
+      2-3 paragraph compassionate reflection
+    </ResponseField>
+    <ResponseField name="themes_identified" type="string[]">
+      Key themes across all entries
+    </ResponseField>
+    <ResponseField name="dominant_tone" type="string">
+      Most common emotional tone
+    </ResponseField>
+    <ResponseField name="dominant_domain" type="string">
+      Most common life domain
+    </ResponseField>
+    <ResponseField name="stories_analyzed" type="string[]">
+      Array of story IDs included in reflection
+    </ResponseField>
+    <ResponseField name="canonical_weight" type="number">
+      Canonical stories are weighted 2x (sum of weights)
+    </ResponseField>
+    <ResponseField name="week_start" type="string">
+      ISO 8601 timestamp (Sunday 00:00:00)
+    </ResponseField>
+    <ResponseField name="week_end" type="string">
+      ISO 8601 timestamp (Saturday 23:59:59)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="storiesAnalyzed" type="number">
+  Number of stories included in reflection
+</ResponseField>
+
+<ResponseField name="canonicalWeight" type="number">
+  Weight score (canonical stories count 2x)
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/ai/reflection \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "123e4567-e89b-12d3-a456-426614174000",
+    "userWallet": "0x742d35cc6634c0532925a3b844bc9e7595f0beb"
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/ai/reflection', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ userId, userWallet })
+});
+
+const { reflection, storiesAnalyzed } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "reflection": {
+    "id": "456e7890-e89b-12d3-a456-426614174111",
+    "reflection_text": "This week, your entries reveal a strong focus on personal growth and creative expression. You've been navigating changes in your career while maintaining meaningful connections with family.\n\nThere's a notable sense of hope and determination running through your stories, particularly around your decision to pursue art professionally. The conversation with your mom stands out as a key moment of mutual understanding and validation.\n\nYour reflections show increasing clarity about your values and priorities. Continue to honor these insights as you move forward.",
+    "themes_identified": ["growth", "family", "creativity", "identity", "career"],
+    "dominant_tone": "hopeful",
+    "dominant_domain": "growth",
+    "stories_analyzed": ["123e4567-e89b-12d3-a456-426614174000", "...3 more"],
+    "canonical_weight": 6.0,
+    "week_start": "2026-03-02T00:00:00.000Z",
+    "week_end": "2026-03-08T23:59:59.999Z",
+    "created_at": "2026-03-04T10:30:00.000Z"
+  },
+  "storiesAnalyzed": 4,
+  "canonicalWeight": 6.0
+}
+```
+
+### Error Responses
+
+<Expandable title="400 Bad Request">
+```json
+{ "error": "Missing required fields: userId and userWallet" }
+```
+</Expandable>
+
+<Expandable title="429 Too Many Requests">
+```json
+{
+  "error": "You can only generate one reflection per week",
+  "nextAvailable": "2026-03-09T00:00:00.000Z",
+  "existingReflection": { /* existing reflection object */ }
+}
+```
+Reflections are limited to **1 per week** (7-day cooldown).
+</Expandable>
+
+### Fetch Existing Reflections
+
+<api-endpoint>
+  GET /api/ai/reflection?userId={userId}&limit={limit}
+</api-endpoint>
+
+**Query Parameters:**
+- `userId` (required) - User ID
+- `limit` (optional) - Number of reflections to fetch (default: 5)
+
+**Response:**
+```json
+{
+  "reflections": [ /* array of reflection objects */ ],
+  "canGenerate": false,
+  "currentWeekStart": "2026-03-02T00:00:00.000Z"
+}
+```
+
+### Special Cases
+
+<Expandable title="Empty Week">
+If the user has no stories from the past 7 days, the AI generates an encouraging message:
+
+```json
+{
+  "reflection_text": "It looks like you haven't captured any stories this week. Journaling is a powerful tool for self-reflection and growth. Consider setting aside a few minutes today to record your thoughts, experiences, or even small moments of gratitude.",
+  "themes_identified": [],
+  "dominant_tone": "hopeful",
+  "dominant_domain": "growth"
+}
+```
+</Expandable>
+
+<Expandable title="Canonical Story Weighting">
+Stories marked as "Important" (canonical) are weighted 2x in the reflection:
+
+```typescript
+// Stories with is_canonical: true are repeated in the prompt
+if (isCanonical) {
+  storyEntry = `**KEY MOMENT**\n${storyEntry}`;
+  canonicalWeight += 2.0;
+}
+```
+</Expandable>
+
+### Reflection Guidelines
+
+The AI is instructed to:
+- Write in a warm, encouraging tone (not clinical)
+- Focus on patterns, not individual events
+- Offer perspective without being prescriptive
+- Acknowledge sparse entries gently
+- Maximum 500 words
+
+---
+
+## Rate Limits Summary
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `/api/ai/*` | 10 requests | 1 minute |
+| `/api/ai/analyze` (per story) | 30 requests | 1 minute |
+
+<Warning>
+Exceeding rate limits returns `429 Too Many Requests` with a `Retry-After: 60` header.
+</Warning>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Story Endpoints" icon="book" href="/api/story-endpoints">
+    Create and manage journal entries
+  </Card>
+  <Card title="Social Endpoints" icon="users" href="/api/social-endpoints">
+    Add likes, follows, and social features
+  </Card>
+</CardGroup>

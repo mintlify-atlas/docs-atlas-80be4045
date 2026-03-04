@@ -1,0 +1,434 @@
+---
+title: 'Story Endpoints'
+description: 'Create, read, and manage journal entries'
+icon: 'book'
+---
+
+## Overview
+
+Story endpoints handle the core journaling functionality: creating, reading, and managing personal narratives.
+
+<Note>
+All story endpoints require authentication. Users can only access and modify their own stories.
+</Note>
+
+---
+
+## Save Journal Entry
+
+<api-endpoint>
+  POST /api/journal/save
+</api-endpoint>
+
+Create a new journal entry with automatic AI analysis.
+
+### Request Body
+
+<ParamField body="content" type="string" required>
+  Journal entry content (must be non-empty)
+</ParamField>
+
+<ParamField body="title" type="string" optional>
+  Entry title (default: `"Journal Entry {date}"`)
+</ParamField>
+
+<ParamField body="mood" type="string" optional>
+  User's mood (default: `"neutral"`)
+</ParamField>
+
+<ParamField body="tags" type="string[]" optional>
+  Array of tags (default: `[]`)
+</ParamField>
+
+<ParamField body="hasAudio" type="boolean" optional>
+  Whether this entry has an audio recording
+</ParamField>
+
+<ParamField body="audioUrl" type="string" optional>
+  URL to the audio file (if `hasAudio` is true)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Always `true` on successful save
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The created story object
+  <Expandable title="story fields">
+    <ResponseField name="id" type="string">
+      Story UUID
+    </ResponseField>
+    <ResponseField name="author_id" type="string">
+      User ID
+    </ResponseField>
+    <ResponseField name="author_wallet" type="string">
+      User's Ethereum address
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      Entry title
+    </ResponseField>
+    <ResponseField name="content" type="string">
+      Entry content
+    </ResponseField>
+    <ResponseField name="mood" type="string">
+      User's mood
+    </ResponseField>
+    <ResponseField name="tags" type="string[]">
+      Entry tags
+    </ResponseField>
+    <ResponseField name="has_audio" type="boolean">
+      Whether audio exists
+    </ResponseField>
+    <ResponseField name="audio_url" type="string | null">
+      Audio file URL
+    </ResponseField>
+    <ResponseField name="likes" type="number">
+      Like count (always 0 for new stories)
+    </ResponseField>
+    <ResponseField name="comments_count" type="number">
+      Comment count (always 0 for new stories)
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/journal/save \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "A Day of Reflection",
+    "content": "Today I realized that taking breaks is just as important as working hard. I spent the afternoon walking in the park and it gave me so much clarity.",
+    "mood": "peaceful",
+    "tags": ["self-care", "mindfulness"]
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/journal/save', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    title: 'A Day of Reflection',
+    content: 'Today I realized...',
+    mood: 'peaceful',
+    tags: ['self-care', 'mindfulness']
+  })
+});
+
+const { data } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "author_id": "456e7890-e89b-12d3-a456-426614174111",
+    "author_wallet": "0x742d35cc6634c0532925a3b844bc9e7595f0beb",
+    "title": "A Day of Reflection",
+    "content": "Today I realized that taking breaks is just as important as working hard...",
+    "mood": "peaceful",
+    "tags": ["self-care", "mindfulness"],
+    "has_audio": false,
+    "audio_url": null,
+    "likes": 0,
+    "comments_count": 0,
+    "shares": 0,
+    "created_at": "2026-03-04T10:30:00.000Z"
+  },
+  "message": "Journal entry saved successfully!"
+}
+```
+
+### Background Processing
+
+Saving a journal entry automatically triggers two background operations:
+
+1. **AI Analysis** - Calls `/api/ai/analyze` to extract metadata
+2. **CRE Verification** - Calls `/api/cre/trigger` for blockchain attestation
+
+<Note>
+These operations are non-blocking (fire-and-forget). The story is saved immediately even if background tasks fail.
+</Note>
+
+### Error Responses
+
+<Expandable title="400 Bad Request">
+```json
+{ "error": "Content is required" }
+```
+</Expandable>
+
+<Expandable title="404 Not Found">
+```json
+{ "error": "User not found" }
+```
+Authenticated user does not exist in the database.
+</Expandable>
+
+---
+
+## Get User Stories
+
+<api-endpoint>
+  GET /api/stories
+</api-endpoint>
+
+Fetch all stories for the authenticated user.
+
+### Response
+
+<ResponseField name="stories" type="object[]">
+  Array of story objects (ordered by `story_date` descending)
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl https://istory.vercel.app/api/stories \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/stories', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+
+const { stories } = await response.json();
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "stories": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "author_id": "456e7890-e89b-12d3-a456-426614174111",
+      "title": "A Day of Reflection",
+      "content": "Today I realized...",
+      "mood": "peaceful",
+      "tags": ["self-care"],
+      "created_at": "2026-03-04T10:30:00.000Z",
+      "story_date": "2026-03-04T00:00:00.000Z",
+      "is_public": false,
+      "likes": 0
+    },
+    // ... more stories
+  ]
+}
+```
+
+---
+
+## Create Story (Advanced)
+
+<api-endpoint>
+  POST /api/stories
+</api-endpoint>
+
+Create a story with full control over all fields (used for sync operations).
+
+### Request Body
+
+<ParamField body="author_id" type="string" required>
+  User ID (must match authenticated user)
+</ParamField>
+
+<ParamField body="author_wallet" type="string" required>
+  Ethereum address (must match user's wallet)
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  Story title
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  Story content
+</ParamField>
+
+<ParamField body="has_audio" type="boolean" optional>
+  Whether audio exists (default: `false`)
+</ParamField>
+
+<ParamField body="audio_url" type="string" optional>
+  Audio file URL
+</ParamField>
+
+<ParamField body="tags" type="string[]" optional>
+  Array of tags (default: `[]`)
+</ParamField>
+
+<ParamField body="mood" type="string" optional>
+  User's mood (default: `"neutral"`)
+</ParamField>
+
+<ParamField body="ipfs_hash" type="string" optional>
+  IPFS content hash (for Web3 storage)
+</ParamField>
+
+<ParamField body="is_public" type="boolean" optional>
+  Public visibility (default: `false`)
+</ParamField>
+
+<ParamField body="created_at" type="string" optional>
+  ISO 8601 timestamp (for backdating)
+</ParamField>
+
+<ParamField body="story_date" type="string" optional>
+  ISO 8601 date (when the story occurred)
+</ParamField>
+
+### Response
+
+<ResponseField name="story" type="object">
+  The created story object
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://istory.vercel.app/api/stories \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "author_id": "456e7890-e89b-12d3-a456-426614174111",
+    "author_wallet": "0x742d35cc6634c0532925a3b844bc9e7595f0beb",
+    "title": "Weekend Adventure",
+    "content": "Went hiking in the mountains...",
+    "mood": "excited",
+    "tags": ["adventure", "nature"],
+    "is_public": true,
+    "story_date": "2026-03-02T00:00:00.000Z"
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch('https://istory.vercel.app/api/stories', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    author_id: userId,
+    author_wallet: walletAddress,
+    title: 'Weekend Adventure',
+    content: 'Went hiking...',
+    mood: 'excited',
+    is_public: true
+  })
+});
+
+const { story } = await response.json();
+```
+</CodeGroup>
+
+### Error Responses
+
+<Expandable title="400 Bad Request">
+```json
+{ "error": "Missing required fields (author_id, author_wallet, title, content)." }
+```
+</Expandable>
+
+<Expandable title="401 Unauthorized">
+```json
+{ "error": "User not found" }
+```
+</Expandable>
+
+<Expandable title="401 Unauthorized - Wallet Mismatch">
+```json
+{ "error": "Wallet mismatch" }
+```
+The provided `author_wallet` doesn't match the user's actual wallet address.
+</Expandable>
+
+<Expandable title="403 Forbidden">
+```json
+{ "error": "Forbidden" }
+```
+The `author_id` doesn't match the authenticated user.
+</Expandable>
+
+---
+
+## Story Metadata
+
+After a story is created, AI analysis generates metadata stored in the `story_metadata` table:
+
+```typescript
+interface StoryMetadata {
+  story_id: string;
+  themes: string[];
+  emotional_tone: string;
+  life_domain: string;
+  intensity_score: number;        // 0.0-1.0
+  significance_score: number;     // 0.0-1.0
+  people_mentioned: string[];
+  places_mentioned: string[];
+  time_references: string[];
+  brief_insight: string;
+  is_canonical: boolean;          // "Important" flag
+  created_at: string;
+  updated_at: string;
+}
+```
+
+Metadata is accessible via:
+- `GET /api/stories` - Includes metadata in response
+- Direct Supabase queries with joins
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use /journal/save" icon="save">
+    For new entries, use `/api/journal/save` for automatic background processing
+  </Card>
+  <Card title="Use /stories POST" icon="database">
+    For sync operations or when you need control over timestamps
+  </Card>
+  <Card title="Check Ownership" icon="shield">
+    The API automatically verifies ownership - you cannot access other users' stories
+  </Card>
+  <Card title="Handle Async Analysis" icon="clock">
+    AI analysis is non-blocking - metadata may not be available immediately
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="AI Analysis" icon="sparkles" href="/api/ai-endpoints">
+    Learn about automatic story analysis
+  </Card>
+  <Card title="Social Features" icon="users" href="/api/social-endpoints">
+    Add likes and follows to your stories
+  </Card>
+</CardGroup>

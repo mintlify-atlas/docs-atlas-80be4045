@@ -1,0 +1,593 @@
+---
+title: "Chainlink CRE Integration"
+description: "Privacy-preserving verifiable AI compute with on-chain attestation"
+icon: "link"
+---
+
+## Overview
+
+Chainlink **CRE (Compute Runtime Environment)** enables iStory to run AI analysis in a confidential, verifiable enclave with cryptographic proof written on-chain. The integration provides:
+
+- **Verifiable AI**: Gemini AI analysis validated by Chainlink DON consensus
+- **Privacy-Preserving**: Only minimal proofs on-chain, full metrics off-chain
+- **Tamper-Proof**: On-chain attestations prove analysis occurred without revealing content
+
+<Info>
+**CRE Status**: Production-ready on Base Sepolia. Workflow deployed and processing story verifications.
+</Info>
+
+## Architecture
+
+### Data Flow
+
+<Steps>
+  <Step title="Trigger">
+    User submits story → `/api/cre/trigger` sends content to CRE workflow
+  </Step>
+  <Step title="AI Analysis">
+    Gemini 2.5 Flash analyzes story in confidential enclave (ConfidentialHTTPClient)
+  </Step>
+  <Step title="DON Consensus">
+    Multiple Chainlink nodes validate analysis results
+  </Step>
+  <Step title="Dual Write">
+    - **On-Chain**: Quality tier + threshold + hashes → `PrivateVerifiedMetrics.sol`
+    - **Off-Chain**: Full metrics → `/api/cre/callback` → Supabase
+  </Step>
+  <Step title="Read">
+    `/api/cre/check` filters by authorship (authors see full metrics, public sees proof only)
+  </Step>
+</Steps>
+
+### Privacy Model
+
+<Accordion title="What Goes On-Chain vs Off-Chain">
+**On-Chain (PrivateVerifiedMetrics.sol):**
+- `qualityTier` (1-5): Tier derived from 0-100 score
+- `meetsQualityThreshold` (bool): Score >= 70
+- `metricsHash` (bytes32): keccak256 of full metrics + salt
+- `authorCommitment` (bytes32): keccak256 of author address + story ID
+
+**Off-Chain (Supabase `verified_metrics` table):**
+- `significanceScore` (0-100)
+- `emotionalDepth` (0-100)
+- `qualityScore` (0-100)
+- `wordCount` (int)
+- `themes` (string[])
+
+**Why?**
+- On-chain proofs enable trustless verification
+- Off-chain storage keeps detailed metrics private
+- Author commitment allows proving ownership without revealing identity
+</Accordion>
+
+## Smart Contract
+
+### PrivateVerifiedMetrics.sol
+
+<CodeGroup>
+```solidity contracts/PrivateVerifiedMetrics.sol
+pragma solidity ^0.8.20;
+
+import {ReceiverTemplate} from "./interfaces/ReceiverTemplate.sol";
+
+contract PrivateVerifiedMetrics is ReceiverTemplate {
+    struct MinimalMetrics {
+        bool meetsQualityThreshold;
+        uint8 qualityTier;
+        bytes32 metricsHash;
+        bytes32 authorCommitment;
+        bytes32 attestationId;
+        uint256 verifiedAt;
+        bool exists;
+    }
+    
+    mapping(bytes32 => MinimalMetrics) public metrics;
+    
+    event MetricsVerified(
+        bytes32 indexed storyId,
+        bytes32 indexed authorCommitment,
+        uint8 qualityTier,
+        bool meetsQualityThreshold
+    );
+    
+    constructor(address _forwarderAddress) 
+        ReceiverTemplate(_forwarderAddress) {}
+    
+    function _processReport(bytes calldata report) internal override {
+        (bytes32 storyId, bytes32 authorCommitment, bool meetsQualityThreshold,
+         uint8 qualityTier, bytes32 metricsHash, bytes32 attestationId) = 
+            abi.decode(report, (bytes32, bytes32, bool, uint8, bytes32, bytes32));
+        
+        metrics[storyId] = MinimalMetrics({
+            meetsQualityThreshold: meetsQualityThreshold,
+            qualityTier: qualityTier,
+            metricsHash: metricsHash,
+            authorCommitment: authorCommitment,
+            attestationId: attestationId,
+            verifiedAt: block.timestamp,
+            exists: true
+        });
+        
+        emit MetricsVerified(storyId, authorCommitment, qualityTier, meetsQualityThreshold);
+    }
+    
+    function verifyAuthor(bytes32 storyId, address author) external view returns (bool) {
+        bytes32 computed = keccak256(abi.encodePacked(author, storyId));
+        return computed == metrics[storyId].authorCommitment;
+    }
+}
+```
+</CodeGroup>
+
+<Accordion title="Contract Addresses">
+**Base Sepolia:**
+- **PrivateVerifiedMetrics**: `0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c`
+- **KeystoneForwarder**: `0x82300bd7c3958625581cc2f77bc6464dcecdf3e5`
+
+**Legacy Contract (backward compat):**
+- **VerifiedMetrics**: `0x052B52A4841080a98876275d5f8E6d094c9E086C`
+</Accordion>
+
+### Key Functions
+
+<CardGroup cols={2}>
+  <Card title="getMetrics()" icon="magnifying-glass">
+    Returns minimal on-chain proof for a story
+  </Card>
+  <Card title="verifyAuthor()" icon="user-check">
+    Proves authorship by recomputing commitment hash
+  </Card>
+  <Card title="verifyMetricsHash()" icon="hashtag">
+    Proves metrics integrity by comparing hashes
+  </Card>
+  <Card title="isVerified()" icon="circle-check">
+    Checks if a story has been CRE-verified
+  </Card>
+</CardGroup>
+
+## CRE Workflow
+
+### Project Structure
+
+<CodeGroup>
+```yaml cre/project.yaml
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia-base-1
+      url: https://sepolia.base.org
+```
+
+```yaml cre/iStory_workflow/workflow.yaml
+name: iStory_workflow
+version: "1.0"
+entry: main.ts
+config:
+  staging: config.staging.json
+  production: config.production.json
+```
+
+```json cre/iStory_workflow/config.staging.json
+{
+  "geminiModel": "gemini-2.5-flash",
+  "callbackUrl": "https://e-story-dapp.vercel.app/api/cre/callback",
+  "owner": "0x...",
+  "evms": [{
+    "verifiedMetricsAddress": "0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c",
+    "chainSelectorName": "ethereum-testnet-sepolia-base-1",
+    "gasLimit": "500000"
+  }]
+}
+```
+</CodeGroup>
+
+### Workflow Code
+
+<Accordion title="main.ts - Entry Point">
+```typescript cre/iStory_workflow/main.ts
+import { cre, Runner } from "@chainlink/cre-sdk";
+import { onHttpTrigger } from "./httpCallback";
+
+export type Config = {
+  geminiModel: string;
+  callbackUrl: string;
+  owner: string;
+  evms: Array<{
+    verifiedMetricsAddress: string;
+    chainSelectorName: string;
+    gasLimit: string;
+  }>;
+};
+
+const initWorkflow = (config: Config) => {
+  const httpCapability = new cre.capabilities.HTTPCapability();
+  const httpTrigger = httpCapability.trigger({});
+  return [cre.handler(httpTrigger, onHttpTrigger)];
+};
+
+export async function main() {
+  const runner = await Runner.newRunner<Config>();
+  await runner.run(initWorkflow);
+}
+
+main();
+```
+</Accordion>
+
+<Accordion title="httpCallback.ts - 8-Step Handler">
+```typescript cre/iStory_workflow/httpCallback.ts
+import { cre, ConfidentialHTTPClient, Runtime, HTTPPayload, getNetwork } from "@chainlink/cre-sdk";
+import { encodeAbiParameters, parseAbiParameters, keccak256, encodePacked } from "viem";
+import { askGemini } from "./gemini";
+
+interface TriggerInput {
+  storyId: string;
+  title: string;
+  content: string;
+  authorWallet: string;
+}
+
+export function onHttpTrigger(runtime: Runtime<Config>, payload: HTTPPayload): string {
+  // Step 1: Parse payload
+  const input = decodeJson(payload.input) as TriggerInput;
+  
+  // Step 2: AI Analysis via Gemini (confidential)
+  const metrics = askGemini(runtime, input.title, input.content);
+  
+  // Step 3: Derive privacy fields
+  const qualityTier = scoreToTier(metrics.qualityScore);
+  const meetsQualityThreshold = metrics.qualityScore >= 70;
+  const salt = keccak256(storyIdBytes32);
+  const metricsHash = keccak256(encodeAbiParameters(...));
+  const authorCommitment = keccak256(encodePacked(["address", "bytes32"], [authorWallet, storyId]));
+  
+  // Step 4: Get EVM network and client
+  const network = getNetwork({ chainSelectorName: "ethereum-testnet-sepolia-base-1" });
+  const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector);
+  
+  // Step 5: Encode minimal data
+  const reportData = encodeAbiParameters([storyId, authorCommitment, meetsQualityThreshold, qualityTier, metricsHash, attestationId]);
+  
+  // Step 6: Generate CRE report
+  const reportResponse = runtime.report({ encodedPayload: hexToBase64(reportData), ... }).result();
+  
+  // Step 7: Write to smart contract
+  const writeResult = evmClient.writeReport(runtime, { receiver: contractAddress, report: reportResponse }).result();
+  
+  // Step 8: Callback full metrics to API (confidential)
+  const confClient = new ConfidentialHTTPClient();
+  confClient.sendRequest(runtime, { url: callbackUrl, method: "POST", body: fullMetrics }).result();
+  
+  return txHash;
+}
+```
+</Accordion>
+
+<Accordion title="gemini.ts - AI Analysis">
+```typescript cre/iStory_workflow/gemini.ts
+import { ConfidentialHTTPClient, Runtime, consensusIdenticalAggregation } from "@chainlink/cre-sdk";
+
+export function askGemini(runtime: Runtime<Config>, title: string, content: string) {
+  const client = new ConfidentialHTTPClient();
+  
+  const prompt = `Analyze this journal entry and return JSON with:
+  - significanceScore (0-100)
+  - emotionalDepth (0-100)
+  - qualityScore (0-100)
+  - wordCount (int)
+  - themes (string[])`;
+  
+  const response = client.sendRequest(
+    runtime,
+    buildGeminiRequest(title, content, prompt),
+    consensusIdenticalAggregation<{ metrics: Metrics }>()
+  )(runtime.config).result();
+  
+  return response.metrics;
+}
+```
+</Accordion>
+
+## API Integration
+
+### Trigger Workflow
+
+<CodeGroup>
+```typescript app/api/cre/trigger/route.ts
+import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  const authResult = await validateAuthOrReject(req);
+  if (isAuthError(authResult)) return authResult;
+  const userId = authResult;
+  
+  const { storyId, title, content } = await req.json();
+  
+  // Verify ownership
+  const { data: story } = await supabase
+    .from("stories")
+    .select("author_id, author_wallet")
+    .eq("id", storyId)
+    .single();
+  
+  if (story.author_id !== userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  
+  // Trigger CRE workflow
+  const payload = {
+    storyId,
+    title,
+    content,
+    authorWallet: story.author_wallet,
+  };
+  
+  // POST to Chainlink CRE endpoint (requires early access)
+  const response = await fetch(process.env.CRE_WORKFLOW_URL!, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  
+  return NextResponse.json({ success: true });
+}
+```
+</CodeGroup>
+
+### Receive Callback
+
+<CodeGroup>
+```typescript app/api/cre/callback/route.ts
+export async function POST(req: NextRequest) {
+  // Verify CRE callback secret (timing-safe)
+  const secret = req.headers.get("X-CRE-Callback-Secret");
+  if (!safeCompare(secret!, process.env.CRE_CALLBACK_SECRET!)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  const { storyId, authorWallet, metricsHash, txHash, ...fullMetrics } = await req.json();
+  
+  // Store full metrics in Supabase (off-chain)
+  await supabase.from("verified_metrics").upsert({
+    story_id: storyId,
+    author_wallet: authorWallet,
+    significance_score: fullMetrics.significanceScore,
+    emotional_depth: fullMetrics.emotionalDepth,
+    quality_score: fullMetrics.qualityScore,
+    word_count: fullMetrics.wordCount,
+    themes: fullMetrics.themes,
+    quality_tier: fullMetrics.qualityTier,
+    meets_quality_threshold: fullMetrics.meetsQualityThreshold,
+    metrics_hash: metricsHash,
+    tx_hash: txHash,
+    attestation_id: storyId,
+  });
+  
+  return NextResponse.json({ success: true });
+}
+```
+</CodeGroup>
+
+### Read Metrics (Author-Filtered)
+
+<CodeGroup>
+```typescript app/api/cre/check/route.ts
+import { validateAuth } from "@/lib/auth";
+
+export async function GET(req: NextRequest) {
+  const storyId = req.nextUrl.searchParams.get("storyId");
+  const userId = await validateAuth(req);
+  
+  // Get on-chain proof
+  const contract = getContract({
+    address: VERIFIED_METRICS_ADDRESS,
+    abi: VERIFIED_METRICS_ABI,
+  });
+  const onChainProof = await contract.read.getMetrics([storyIdBytes32]);
+  
+  // Get off-chain metrics
+  const { data: offChainMetrics } = await supabase
+    .from("verified_metrics")
+    .select("*")
+    .eq("story_id", storyId)
+    .single();
+  
+  // Check if requester is author
+  const { data: story } = await supabase
+    .from("stories")
+    .select("author_id")
+    .eq("id", storyId)
+    .single();
+  
+  const isAuthor = userId && story.author_id === userId;
+  
+  // Return filtered data
+  return NextResponse.json({
+    proof: {
+      qualityTier: onChainProof.qualityTier,
+      meetsQualityThreshold: onChainProof.meetsQualityThreshold,
+      metricsHash: onChainProof.metricsHash,
+      verifiedAt: onChainProof.verifiedAt,
+    },
+    metrics: isAuthor ? {
+      significanceScore: offChainMetrics.significance_score,
+      emotionalDepth: offChainMetrics.emotional_depth,
+      qualityScore: offChainMetrics.quality_score,
+      wordCount: offChainMetrics.word_count,
+      themes: offChainMetrics.themes,
+    } : null,
+  });
+}
+```
+</CodeGroup>
+
+## Frontend Hook
+
+### useVerifiedMetrics
+
+<CodeGroup>
+```typescript app/hooks/useVerifiedMetrics.ts
+import { useQuery } from "@tanstack/react-query";
+
+export function useVerifiedMetrics(storyId: string, authorWallet?: string) {
+  return useQuery({
+    queryKey: ["verified-metrics", storyId],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/cre/check?storyId=${storyId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.json();
+    },
+    enabled: !!storyId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+```
+
+```tsx Usage Example
+const VerifiedBadge = ({ storyId }: { storyId: string }) => {
+  const { data, isLoading } = useVerifiedMetrics(storyId);
+  
+  if (isLoading) return <Skeleton />;
+  if (!data?.proof) return null;
+  
+  return (
+    <div className="flex items-center gap-2">
+      <ShieldCheck className="text-green-500" />
+      <span>CRE Verified</span>
+      <Badge>Tier {data.proof.qualityTier}</Badge>
+      
+      {data.metrics && (
+        <Popover>
+          <PopoverTrigger>View Details</PopoverTrigger>
+          <PopoverContent>
+            <p>Quality Score: {data.metrics.qualityScore}/100</p>
+            <p>Word Count: {data.metrics.wordCount}</p>
+            <p>Themes: {data.metrics.themes.join(", ")}</p>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+};
+```
+</CodeGroup>
+
+## Development Commands
+
+### CRE Workflow Commands
+
+<CodeGroup>
+```bash Terminal
+# Install dependencies
+cd cre/iStory_workflow
+bun install
+
+# Local simulation (no blockchain write)
+cre workflow simulate iStory_workflow
+
+# Simulation with broadcast (writes to Base Sepolia)
+cre workflow simulate iStory_workflow --broadcast
+
+# Deploy to production
+cre workflow deploy iStory_workflow
+
+# Test with payload
+cre workflow trigger iStory_workflow --input '{"storyId":"...", "content":"..."}'
+```
+</CodeGroup>
+
+### Contract Deployment
+
+<CodeGroup>
+```bash Hardhat
+# Compile contract
+npx hardhat compile
+
+# Deploy to Base Sepolia
+npx hardhat run scripts/deploy.ts --network baseSepolia
+
+# Verify on Basescan
+npx hardhat verify --network baseSepolia 0x158e08BC... 0x82300bd7...
+
+# Verify ABI matches expected interface
+npx hardhat run scripts/verify-deployment.ts --network baseSepolia
+```
+</CodeGroup>
+
+## Security Considerations
+
+<Accordion title="CRE Security Model">
+**Confidential Compute:**
+- AI analysis runs in TEE (Trusted Execution Environment)
+- ConfidentialHTTPClient encrypts all API requests
+- No node can see raw story content
+
+**DON Consensus:**
+- Multiple nodes validate analysis independently
+- Byzantine fault tolerance (⅔ agreement required)
+- Consensus aggregation ensures identical results
+
+**Privacy Guarantees:**
+- On-chain data reveals no content or scores
+- Author commitment prevents identity linkage
+- Metrics hash enables trustless verification
+- Off-chain data only accessible to author
+</Accordion>
+
+<Accordion title="Rate Limiting">
+```typescript middleware.ts
+if (pathname === "/api/cre/callback") return 30; // Higher limit for DON nodes
+if (pathname === "/api/cre/trigger") return 10;  // Prevent workflow spam
+```
+
+**Why higher callback limit?**
+Multiple DON nodes (typically 5-7) call the callback endpoint per verification. A limit of 30 accommodates parallel node callbacks while still preventing abuse.
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="Workflow Simulation Fails">
+**Error:** `Unknown chain: ethereum-testnet-sepolia-base-1`
+
+**Fix:** Ensure `cre/project.yaml` includes RPC configuration:
+```yaml
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia-base-1
+      url: https://sepolia.base.org
+```
+</Accordion>
+
+<Accordion title="Callback Not Received">
+**Checklist:**
+1. Verify `callbackUrl` in `config.staging.json` is publicly accessible
+2. Check `X-CRE-Callback-Secret` header matches env var
+3. Ensure `/api/cre/callback` rate limit allows multiple nodes (limit: 30)
+4. Check Vercel function logs for errors
+</Accordion>
+
+<Accordion title="On-Chain Proof Missing">
+**Possible Causes:**
+- Transaction failed (check `txHash` on Basescan)
+- Contract address mismatch (verify `verifiedMetricsAddress`)
+- KeystoneForwarder not authorized (call `setForwarderAddress`)
+
+**Debug:**
+```typescript
+const isVerified = await contract.read.isVerified([storyIdBytes32]);
+console.log("Is verified:", isVerified);
+```
+</Accordion>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Tech Stack" icon="layers" href="/architecture/tech-stack">
+    Review the complete technology stack
+  </Card>
+  <Card title="Security" icon="shield" href="/architecture/security">
+    Understand security architecture
+  </Card>
+</CardGroup>

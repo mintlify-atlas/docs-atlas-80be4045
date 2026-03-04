@@ -1,0 +1,463 @@
+---
+title: "Tech Stack"
+description: "Complete overview of iStory's technology stack and dependencies"
+icon: "layers"
+---
+
+## Overview
+
+iStory is built on a modern, production-ready stack that combines Web3 infrastructure, AI services, and cloud-native technologies. The architecture prioritizes security, scalability, and developer experience.
+
+## Frontend Stack
+
+### Core Framework
+
+<CardGroup cols={2}>
+  <Card title="Next.js 15.5.9" icon="react">
+    App Router with React 19 for performant, SEO-friendly experiences
+  </Card>
+  <Card title="TypeScript 5" icon="code">
+    Full type safety across the entire application
+  </Card>
+</CardGroup>
+
+### UI & Styling
+
+<CodeGroup>
+```json package.json
+{
+  "dependencies": {
+    "next": "15.5.9",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "tailwindcss": "^4",
+    "framer-motion": "^12.23.22"
+  }
+}
+```
+</CodeGroup>
+
+<Accordion title="Styling Dependencies">
+  - **Tailwind CSS 4** - Utility-first CSS with dark/light mode support
+  - **shadcn/ui** - Accessible, customizable component library built on Radix UI
+  - **Framer Motion** - Production-ready animation library (~45 kB)
+  - **Lucide React** - Consistent iconography
+  - **Radix UI** - Headless, accessible UI primitives
+</Accordion>
+
+### State Management & Data Fetching
+
+- **TanStack Query** (v5.90.2) - Server state management and caching
+- **React Hook Form** (v7.63.0) - Performant form validation
+- **Zod** (v3.25.76) - TypeScript-first schema validation
+- **Dexie** (v4.3.0) - IndexedDB wrapper for local vault storage
+
+## Web3 & Blockchain
+
+### Network Configuration
+
+<Info>
+iStory is deployed on **Base Sepolia** (Chain ID: 84532), an Ethereum Layer 2 that provides low-cost, fast transactions while maintaining Ethereum's security guarantees.
+</Info>
+
+### Web3 Libraries
+
+<CodeGroup>
+```typescript lib/wagmi.config.ts
+import { createConfig, http } from "wagmi";
+import { baseSepolia } from "wagmi/chains";
+import { coinbaseWallet, walletConnect } from "wagmi/connectors";
+
+export const wagmiConfig = createConfig({
+  chains: [baseSepolia],
+  connectors: [
+    walletConnect({ projectId: process.env.NEXT_PUBLIC_PROJECT_ID! }),
+    coinbaseWallet({ appName: "iStory" }),
+  ],
+  transports: {
+    [baseSepolia.id]: http("https://sepolia.base.org"),
+  },
+});
+```
+</CodeGroup>
+
+**Key Dependencies:**
+- **Wagmi** (v2.17.5) - React hooks for Ethereum
+- **Viem** (v2.38.0) - TypeScript Ethereum interface
+- **RainbowKit** (v2.2.8) - Wallet connection UI
+
+### Smart Contracts
+
+<CardGroup cols={3}>
+  <Card title="EStoryToken" icon="coins">
+    ERC20 token with 100M supply cap
+  </Card>
+  <Card title="StoryProtocol" icon="handshake">
+    Tips & paywall payment handling
+  </Card>
+  <Card title="StoryNFT" icon="image">
+    ERC721 NFTs for story books
+  </Card>
+</CardGroup>
+
+<Accordion title="Contract Addresses (Base Sepolia)">
+```typescript lib/contracts.ts
+export const STORY_TOKEN_ADDRESS = "0xf9eDD76B55F58Bf4E8Ae2A90a1D6d8d44dfA74BC";
+export const STORY_PROTOCOL_ADDRESS = "0xA51a4cA00cC4C81A5F7cB916D0BFa1a4aD6f4a71";
+export const STORY_NFT_ADDRESS = "0x6D37ebc5eAEF37ecC888689f295D114187933342";
+export const VERIFIED_METRICS_ADDRESS = "0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c";
+```
+
+All contracts use **OpenZeppelin** audited libraries:
+- `AccessControl` - Role-based permissions
+- `Pausable` - Emergency stop mechanism
+- `ReentrancyGuard` - Protection against reentrancy attacks
+- `SafeERC20` - Safe token transfers
+</Accordion>
+
+## Backend & Database
+
+### Supabase Infrastructure
+
+<CodeGroup>
+```typescript app/utils/supabase/supabaseClient.ts
+import { createBrowserClient } from "@supabase/ssr";
+
+let client: ReturnType<typeof createBrowserClient> | null = null;
+
+export function createSupabaseBrowserClient() {
+  if (!client) {
+    client = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return client;
+}
+```
+</CodeGroup>
+
+**Three Supabase Client Variants:**
+
+| Client | Use Case | Location |
+|--------|----------|----------|
+| **Browser Client** | Client components, browser operations | `supabaseClient.ts` |
+| **Server Client** | API routes, SSR (uses cookies) | `supabaseServer.ts` |
+| **Admin Client** | Admin operations (bypasses RLS) | `supabaseAdmin.ts` |
+
+<Warning>
+The admin client bypasses Row Level Security (RLS). Use it sparingly and always add explicit authorization checks before performing operations.
+</Warning>
+
+### Database
+
+- **PostgreSQL** via Supabase with Row Level Security
+- **Real-time subscriptions** for notifications
+- **Supabase Storage** for audio files and media
+
+See [Database Schema](/architecture/database) for full table structure.
+
+## AI Services
+
+### Speech & Text Processing
+
+<CardGroup cols={2}>
+  <Card title="ElevenLabs Scribe" icon="microphone">
+    Speech-to-text transcription (25MB file limit)
+  </Card>
+  <Card title="Google Gemini 2.5 Flash" icon="sparkles">
+    Text enhancement and story analysis
+  </Card>
+</CardGroup>
+
+<CodeGroup>
+```typescript app/api/ai/transcribe/route.ts
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
+
+const transcription = await elevenlabs.audioNative.scribe({
+  audio: audioBuffer,
+});
+```
+
+```typescript app/api/ai/enhance/route.ts
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY!
+);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+```
+</CodeGroup>
+
+### Chainlink CRE Integration
+
+<Info>
+**CRE (Compute Runtime Environment)** provides verifiable off-chain compute with on-chain attestation. See [CRE Integration](/architecture/cre-integration) for details.
+</Info>
+
+- **Workflow SDK**: `@chainlink/cre-sdk` for building verifiable AI workflows
+- **Confidential HTTP**: Encrypted communication with AI services
+- **DON Consensus**: Multiple nodes validate AI analysis results
+
+## Storage & CDN
+
+### IPFS (Pinata)
+
+<CodeGroup>
+```typescript app/utils/ipfsService.ts
+import { PinataSDK } from "pinata-web3";
+
+const pinata = new PinataSDK({
+  pinataJwt: process.env.PINATA_JWT,
+  pinataGateway: process.env.NEXT_PUBLIC_PINATA_GATEWAY,
+});
+
+export async function uploadToIPFS(file: File) {
+  const upload = await pinata.upload.file(file);
+  return `${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${upload.IpfsHash}`;
+}
+```
+</CodeGroup>
+
+**Use Cases:**
+- Story NFT metadata storage
+- Book cover images
+- Immutable content archiving
+
+## Security & Infrastructure
+
+### Middleware
+
+<CodeGroup>
+```typescript middleware.ts
+function getRateLimit(pathname: string): number {
+  if (pathname === "/api/cre/callback") return 30;
+  if (pathname.startsWith("/api/ai/")) return 10;
+  if (pathname.startsWith("/api/auth/")) return 20;
+  if (pathname.startsWith("/api/")) return 60;
+  return 0;
+}
+```
+</CodeGroup>
+
+**Features:**
+- Route-specific rate limiting (in-memory store)
+- CORS configuration for mobile app
+- Security headers injection
+
+### Authentication
+
+<Accordion title="Dual Authentication System">
+**1. Wallet Authentication (Web3)**
+- Server-generated nonces (5-minute expiry)
+- HMAC-signed linking tokens
+- Custom JWT for wallet-authenticated users
+
+**2. OAuth Authentication (Supabase)**
+- Google OAuth with redirect whitelist
+- Supabase session JWT
+- Account linking support
+
+See [Security](/architecture/security) for authentication flow details.
+</Accordion>
+
+### Security Headers
+
+<CodeGroup>
+```javascript next.config.mjs
+async headers() {
+  return [{
+    source: "/(.*)",
+    headers: [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Content-Security-Policy", value: "..." },
+    ],
+  }];
+}
+```
+</CodeGroup>
+
+## Testing Infrastructure
+
+<CardGroup cols={2}>
+  <Card title="Vitest" icon="vial">
+    Unit tests with React Testing Library
+  </Card>
+  <Card title="Playwright" icon="browser">
+    E2E tests across Chrome, Firefox, Safari
+  </Card>
+</CardGroup>
+
+<CodeGroup>
+```bash Terminal
+# Unit tests
+npx vitest run
+npx vitest run --coverage
+
+# E2E tests
+npx playwright test
+npx playwright test --ui
+```
+</CodeGroup>
+
+**Test Coverage:**
+- 38 tests for AI analysis endpoint
+- 41 tests for StoryInsights component
+- E2E navigation tests
+- Mock factories for Supabase, Web Crypto API
+
+## Development Tools
+
+### Smart Contract Development
+
+<CodeGroup>
+```typescript hardhat.config.ts
+import { HardhatUserConfig } from "hardhat/config";
+import "@nomicfoundation/hardhat-toolbox";
+
+const config: HardhatUserConfig = {
+  solidity: "0.8.20",
+  networks: {
+    baseSepolia: {
+      url: "https://sepolia.base.org",
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+  },
+};
+```
+</CodeGroup>
+
+**Commands:**
+```bash
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network baseSepolia
+npx hardhat run scripts/verify-deployment.ts --network baseSepolia
+```
+
+### Code Quality
+
+- **ESLint** - Code linting with Next.js config
+- **TypeScript** - Strict mode enabled
+- **Prettier** - Code formatting (via IDE integration)
+
+## Performance Optimizations
+
+### Bundle Size Budget
+
+<Note>
+**Target:** Keep pages under 500 kB First Load JS
+
+**Current (March 2026):**
+- Shared chunks: 104 kB
+- Landing page: 426 kB
+- Record page: 467 kB
+- Profile page: 498 kB ✅
+</Note>
+
+### Applied Optimizations
+
+<Accordion title="Package Import Optimization">
+```javascript next.config.mjs
+experimental: {
+  optimizePackageImports: [
+    "lucide-react",
+    "framer-motion",
+    "@radix-ui/react-icons",
+    "date-fns",
+    "@supabase/supabase-js",
+  ],
+}
+```
+
+This reduces bundle size by tree-shaking unused exports.
+</Accordion>
+
+<Accordion title="Dynamic Imports">
+- **Three.js background**: Dynamically loaded with `ssr: false`
+- **ProvidersDynamic**: Web3 providers loaded only when needed
+- **Capability detection**: Skips heavy animations on weak devices
+</Accordion>
+
+## Environment Variables
+
+<CodeGroup>
+```bash .env.local
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# AI Services
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_key
+ELEVENLABS_API_KEY=your_elevenlabs_key
+
+# Web3 & Blockchain
+NEXT_PUBLIC_PROJECT_ID=your_walletconnect_project_id
+NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS=0x...
+NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0x...
+NEXT_PUBLIC_STORY_NFT_ADDRESS=0x...
+
+# IPFS
+PINATA_JWT=your_pinata_jwt
+NEXT_PUBLIC_PINATA_GATEWAY=your_gateway_url
+
+# Security
+CRON_SECRET=your_cron_secret
+JWT_SECRET=your_jwt_secret
+```
+</CodeGroup>
+
+<Warning>
+Never commit `.env.local` to version control. Use Vercel environment variables for production deployments.
+</Warning>
+
+## Deployment
+
+### Vercel (Recommended)
+
+<Steps>
+  <Step title="Connect Repository">
+    Link your GitHub repository to Vercel
+  </Step>
+  <Step title="Configure Environment Variables">
+    Add all environment variables from `.env.local`
+  </Step>
+  <Step title="Deploy">
+    Vercel automatically runs `npm run build` on push
+  </Step>
+</Steps>
+
+### Build Verification
+
+<CodeGroup>
+```bash Terminal
+# Verify build passes
+npm run build
+
+# Check for TypeScript errors
+npx tsc --noEmit
+
+# Run tests
+npx vitest run
+```
+</CodeGroup>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Security Architecture" icon="shield" href="/architecture/security">
+    Learn about authentication, authorization, and security patterns
+  </Card>
+  <Card title="Database Schema" icon="database" href="/architecture/database">
+    Explore the PostgreSQL schema and RLS policies
+  </Card>
+  <Card title="CRE Integration" icon="link" href="/architecture/cre-integration">
+    Understand verifiable AI compute with Chainlink
+  </Card>
+</CardGroup>

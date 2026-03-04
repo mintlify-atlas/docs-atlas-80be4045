@@ -1,0 +1,513 @@
+---
+title: Cognitive Insights
+description: Extract themes, emotions, and patterns from your stories using AI analysis
+icon: brain
+---
+
+## What are Cognitive Insights?
+
+Cognitive Insights use **Google Gemini 2.5 Flash AI** to analyze your journal entries and extract structured metadata: themes, emotional tone, life domain, significance scores, and entities (people, places, time references). This transforms unstructured text into searchable, quantifiable data for pattern discovery.
+
+## Why Use Cognitive Insights?
+
+<CardGroup cols={2}>
+  <Card title="Discover Patterns" icon="chart-line">
+    See recurring themes (growth, loss, connection) and emotional trends over time.
+  </Card>
+  <Card title="Quantify Significance" icon="star">
+    AI scores each story's intensity and life importance (0-100 scale).
+  </Card>
+  <Card title="Entity Extraction" icon="tags">
+    Automatically tag people, places, and time references for quick filtering.
+  </Card>
+  <Card title="Searchable Metadata" icon="magnifying-glass">
+    Query stories by emotional tone (joyful, anxious) or life domain (relationships, work).
+  </Card>
+</CardGroup>
+
+## How to Generate Insights
+
+<Steps>
+  <Step title="Save a Story">
+    Insights are available **after** you save a story to the database. They cannot be generated on unsaved drafts.
+  </Step>
+
+  <Step title="Open the Story">
+    Navigate to the story's detail page (from Library or Social Feed). The **AI Insights** card appears at the bottom.
+  </Step>
+
+  <Step title="Trigger Analysis">
+    If insights haven't been generated yet, you'll see:
+    
+    <Info>
+      **"AI Insights Available"** card with a **Generate Insights** button.
+    </Info>
+    
+    Click the button to start analysis. This happens automatically in the background when you save a story, but you can manually trigger it here.
+  </Step>
+
+  <Step title="Wait for Processing">
+    Analysis typically takes **3-8 seconds**. You'll see:
+    
+    - **Analyzing...** spinner
+    - Toast notification: "Analyzing Your Story"
+    
+    The AI processes up to **10,000 characters** per story (longer stories are truncated).
+  </Step>
+
+  <Step title="Review Insights">
+    The card updates to show:
+    
+    - **Brief Insight**: One-sentence AI observation
+    - **Emotional Tone**: Badge (joyful, anxious, reflective, etc.)
+    - **Life Domain**: Badge (relationships, work, growth, etc.)
+    - **Themes**: Up to 5 key themes (e.g., "discovery", "connection")
+    - **Intensity Score**: 0-100% (how emotionally charged)
+    - **Significance Score**: 0-100% (how important to life story)
+    - **Entities**: People, places, time references mentioned
+  </Step>
+
+  <Step title="Refresh Insights (Optional)">
+    Click the **Refresh** button (circular arrow icon) to re-analyze. Useful if you edited the story after initial analysis.
+  </Step>
+</Steps>
+
+## Insight Components Explained
+
+### Brief Insight
+
+A **single sentence** AI-generated observation about the story's meaning.
+
+**Example:**
+> "This story captures a pivotal moment of self-discovery during a challenging transition."
+
+**Displayed in:** Light blue box with lightbulb icon.
+
+---
+
+### Emotional Tone (11 Categories)
+
+<AccordionGroup>
+  <Accordion title="Reflective">
+    Thoughtful, introspective, contemplative. Often appears in stories about past events or lessons learned.
+  </Accordion>
+  
+  <Accordion title="Joyful">
+    Happy, celebratory, excited. Common in success stories or cherished memories.
+  </Accordion>
+  
+  <Accordion title="Anxious">
+    Worried, stressed, uncertain. Appears in stories about challenges or upcoming decisions.
+  </Accordion>
+  
+  <Accordion title="Hopeful">
+    Optimistic, forward-looking, aspirational. Stories about goals or positive expectations.
+  </Accordion>
+  
+  <Accordion title="Melancholic">
+    Sad, nostalgic, wistful. Stories about loss, endings, or bittersweet memories.
+  </Accordion>
+  
+  <Accordion title="Grateful">
+    Appreciative, thankful, content. Stories expressing gratitude or appreciation.
+  </Accordion>
+  
+  <Accordion title="Frustrated">
+    Annoyed, irritated, stuck. Stories about obstacles or unmet expectations.
+  </Accordion>
+  
+  <Accordion title="Peaceful">
+    Calm, serene, balanced. Stories about rest, nature, or resolution.
+  </Accordion>
+  
+  <Accordion title="Excited">
+    Energized, enthusiastic, anticipatory. Stories about new opportunities or adventures.
+  </Accordion>
+  
+  <Accordion title="Uncertain">
+    Confused, ambivalent, questioning. Stories exploring doubt or complexity.
+  </Accordion>
+  
+  <Accordion title="Neutral">
+    Balanced, observational, factual. Default when no strong emotion detected.
+  </Accordion>
+</AccordionGroup>
+
+**Validation:** AI must choose from these 11 options. Invalid responses default to `neutral`.
+
+---
+
+### Life Domain (11 Categories)
+
+| Domain | Description | Examples |
+|--------|-------------|----------|
+| **Work** | Career, job, professional challenges | Promotion, project completion, workplace conflict |
+| **Relationships** | Romantic, family, friendships | Breakup, wedding, family reunion |
+| **Health** | Physical/mental wellbeing | Illness recovery, fitness milestone, therapy session |
+| **Identity** | Self-concept, values, beliefs | Coming out, cultural heritage, personal transformation |
+| **Growth** | Learning, skill development | New hobby, overcoming fear, mastering skill |
+| **Creativity** | Art, writing, music, expression | Painting, songwriting, creative project launch |
+| **Spirituality** | Faith, meditation, meaning | Prayer, pilgrimage, spiritual awakening |
+| **Family** | Parenting, siblings, heritage | Birth of child, family tradition, ancestry discovery |
+| **Adventure** | Travel, exploration, novelty | Backpacking trip, moving abroad, trying new food |
+| **Learning** | Education, knowledge acquisition | Course completion, research breakthrough, reading insight |
+| **General** | Everyday moments, multiple domains | Default when no specific domain fits |
+
+**Displayed as:** Colored badge with trend icon.
+
+---
+
+### Themes (1-5 per Story)
+
+AI-extracted keywords representing core concepts.
+
+**Examples:**
+- `growth` | `loss` | `discovery` | `connection` | `change`
+- `resilience` | `adventure` | `nostalgia` | `achievement` | `uncertainty`
+
+**Displayed as:** Gray pill badges, clickable for future filtering.
+
+---
+
+### Intensity Score (0-100)
+
+How **emotionally charged** the story is.
+
+| Score Range | Interpretation |
+|-------------|----------------|
+| 0-20 | Calm, factual, low emotion |
+| 21-40 | Mild emotional content |
+| 41-60 | Moderate emotional intensity |
+| 61-80 | Strong emotional experience |
+| 81-100 | Highly intense, peak experience |
+
+**Displayed as:** Progress bar with percentage.
+
+---
+
+### Significance Score (0-100)
+
+How **important** this event is to your life story.
+
+| Score Range | Interpretation |
+|-------------|----------------|
+| 0-20 | Routine, everyday moment |
+| 21-40 | Noteworthy but minor |
+| 41-60 | Meaningful experience |
+| 61-80 | Major life event |
+| 81-100 | Pivotal, life-changing moment |
+
+**Special Badge:** Stories with significance > 70 get a **"Key life moment"** badge with star icon.
+
+**Displayed as:** Progress bar with percentage.
+
+---
+
+### Entity Extraction
+
+<Accordion title="People Mentioned">
+  Proper names of individuals referenced in the story.
+  
+  **Examples:** `Sarah`, `Dr. Johnson`, `Mom`, `Uncle Rick`
+  
+  **Icon:** Users icon (multiple people)
+</Accordion>
+
+<Accordion title="Places Mentioned">
+  Specific locations (cities, buildings, countries).
+  
+  **Examples:** `Paris`, `Central Park`, `the coffee shop on Main St.`
+  
+  **Icon:** Map pin icon
+</Accordion>
+
+<Accordion title="Time References">
+  Temporal markers from the story.
+  
+  **Examples:** `last summer`, `when I was 12`, `three years ago`, `yesterday`
+  
+  **Icon:** Clock icon
+</Accordion>
+
+## Analysis States
+
+The Insights card shows different states based on analysis status:
+
+### 1. Not Started
+
+<CardGroup cols={1}>
+  <Card>
+    **Visual:** Brain icon with gradient background
+    
+    **Button:** "Generate Insights" (gradient blue/purple)
+    
+    **Action:** Click to trigger analysis
+  </Card>
+</CardGroup>
+
+### 2. Pending
+
+<CardGroup cols={1}>
+  <Card>
+    **Visual:** Hourglass icon with yellow background
+    
+    **Message:** "Analysis Queued — Your story is waiting to be analyzed. This usually takes a few moments."
+    
+    **No action available** (wait for processing)
+  </Card>
+</CardGroup>
+
+### 3. Processing
+
+<CardGroup cols={1}>
+  <Card>
+    **Visual:** Spinning loader with purple background
+    
+    **Message:** "Analyzing Your Story — AI is extracting themes, emotions, and patterns from your story..."
+    
+    **Wait time:** 3-8 seconds
+  </Card>
+</CardGroup>
+
+### 4. Failed
+
+<CardGroup cols={1}>
+  <Card>
+    **Visual:** Warning triangle with red background
+    
+    **Message:** "Analysis Failed — Something went wrong while analyzing your story. Please try again."
+    
+    **Button:** "Retry Analysis" (red outline)
+  </Card>
+</CardGroup>
+
+### 5. Completed
+
+<CardGroup cols={1}>
+  <Card>
+    **Visual:** Full insights card with all metadata
+    
+    **Refresh Button:** Top-right circular arrow (re-analyze)
+  </Card>
+</CardGroup>
+
+## Technical Implementation
+
+### Analysis API
+
+```http
+POST /api/ai/analyze
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "storyId": "uuid-of-story",
+  "storyText": "Your story content..."
+}
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "metadata": {
+    "themes": ["growth", "connection"],
+    "emotional_tone": "hopeful",
+    "life_domain": "relationships",
+    "intensity_score": 0.65,
+    "significance_score": 0.72,
+    "people_mentioned": ["Sarah", "Mom"],
+    "places_mentioned": ["Central Park"],
+    "time_references": ["last summer"],
+    "brief_insight": "A turning point in understanding the value of vulnerability."
+  },
+  "insight": "A turning point in understanding the value of vulnerability."
+}
+```
+
+### Rate Limiting
+
+<Warning>
+  **30 requests per minute per user** (enforced by in-memory rate limiter).
+  
+  Exceeding this returns 429 status with `Retry-After` header.
+</Warning>
+
+### Retry Logic
+
+The API includes **exponential backoff** for Gemini API failures:
+
+- **Attempt 1**: Immediate
+- **Attempt 2**: 1 second delay
+- **Attempt 3**: 2 second delay
+
+**Max retries:** 3 attempts
+
+**Code reference:** `/app/api/ai/analyze/route.ts:120-166`
+
+---
+
+### Concurrent Analysis Prevention
+
+<Info>
+  Only one analysis can run per story at a time. Duplicate requests return 409 Conflict: `"Analysis already in progress for this story"`.
+</Info>
+
+---
+
+### Content Truncation
+
+Stories longer than **10,000 characters** are truncated at word boundaries:
+
+```typescript
+if (text.length > 10000) {
+  // Truncate at last space before 10,000
+  text = text.slice(0, lastSpace) + " [truncated]"
+}
+```
+
+**Minimum length:** 50 characters (shorter stories rejected with 400 error).
+
+## Database Schema
+
+Insights are stored in `story_metadata` table:
+
+```sql
+CREATE TABLE story_metadata (
+  story_id UUID PRIMARY KEY REFERENCES stories(id),
+  themes TEXT[],
+  emotional_tone TEXT,
+  life_domain TEXT,
+  intensity_score NUMERIC(3,2),
+  significance_score NUMERIC(3,2),
+  people_mentioned TEXT[],
+  places_mentioned TEXT[],
+  time_references TEXT[],
+  brief_insight TEXT,
+  analysis_status TEXT DEFAULT 'pending',
+  updated_at TIMESTAMPTZ
+);
+```
+
+**Key columns:**
+- `story_id`: One-to-one relationship with stories
+- `analysis_status`: `pending` | `processing` | `completed` | `failed`
+- Arrays (`themes`, `people_mentioned`) stored as PostgreSQL arrays
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Weekly Reflections">
+    Query all stories from the past week with `emotional_tone = 'grateful'` to see what you appreciated.
+  </Accordion>
+  
+  <Accordion title="Pattern Discovery">
+    Filter by `life_domain = 'work'` to analyze career-related stress trends over months.
+  </Accordion>
+  
+  <Accordion title="Memory Triggers">
+    Search `people_mentioned` to find all stories featuring a specific person (e.g., "Sarah").
+  </Accordion>
+  
+  <Accordion title="Milestone Tracking">
+    Sort by `significance_score DESC` to create a timeline of your most important life moments.
+  </Accordion>
+  
+  <Accordion title="Emotional Health Monitoring">
+    Plot `intensity_score` over time to visualize emotional volatility or stability.
+  </Accordion>
+</AccordionGroup>
+
+## Chainlink CRE Verification (Advanced)
+
+For **public stories**, you can request blockchain-attested insights via **Chainlink CRE** (Compute Runtime Environment):
+
+<Steps>
+  <Step title="Trigger CRE Workflow">
+    Call `/api/cre/trigger` with your story ID. This sends the story to Chainlink DON (Decentralized Oracle Network).
+  </Step>
+  
+  <Step title="Off-Chain Computation">
+    Chainlink nodes run the analysis in a trusted enclave (same Gemini AI prompts).
+  </Step>
+  
+  <Step title="On-Chain Attestation">
+    Results are written to **PrivateVerifiedMetrics.sol** on Base Sepolia:
+    
+    ```solidity
+    struct MinimalMetrics {
+      bool meetsQualityThreshold; // qualityScore >= 70
+      uint8 qualityTier;          // 1-5 (0-20, 21-40, 41-60, 61-80, 81-100)
+      bytes32 metricsHash;        // keccak256(full scores + themes)
+      bytes32 authorCommitment;   // keccak256(wallet + storyId)
+      bytes32 attestationId;
+      uint256 verifiedAt;
+    }
+    ```
+    
+    **Privacy:** Only tier/threshold stored on-chain. Full scores in Supabase (author-only access).
+  </Step>
+  
+  <Step title="Retrieve Verified Metrics">
+    Call `/api/cre/check?storyId=<id>` to get:
+    - **If you're the author:** Full metrics + blockchain proof
+    - **If you're public viewer:** Proof only (tier + threshold)
+  </Step>
+</Steps>
+
+**Use case:** Prove your story has high-quality insights without revealing the details.
+
+**Code reference:** `contracts/PrivateVerifiedMetrics.sol`, `app/api/cre/trigger/route.ts`
+
+## Error Handling
+
+<AccordionGroup>
+  <Accordion title="'Story text must be at least 50 characters' (400)">
+    **Cause:** Story too short for meaningful analysis.
+    
+    **Solution:** Add more content before analyzing.
+  </Accordion>
+  
+  <Accordion title="'Rate limit exceeded' (429)">
+    **Cause:** More than 30 analysis requests in 1 minute.
+    
+    **Solution:** Wait 60 seconds before retrying. Check `Retry-After` header for exact time.
+  </Accordion>
+  
+  <Accordion title="'AI returned invalid JSON format' (500)">
+    **Cause:** Gemini API returned malformed response (rare).
+    
+    **Solution:** Retry analysis. If persistent, check server logs for prompt issues.
+  </Accordion>
+  
+  <Accordion title="'Database table story_metadata not found' (500)">
+    **Cause:** Migration not run.
+    
+    **Solution:** Run `migrations/add_story_metadata.sql` on Supabase.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Tip>
+  **For best insights quality:**
+  - Write at least 200-300 words (more context = better analysis)
+  - Be specific about people, places, and times
+  - Express emotions explicitly ("I felt anxious" vs. vague language)
+  - Avoid overly cryptic or abstract writing
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Library Management" icon="chart-line" href="/user-guide/library-management">
+    Use insights to find recurring themes in your journal (Phase 2 feature)
+  </Card>
+  <Card title="AI Enhancement" icon="wand-magic-sparkles" href="/features/ai-enhancement">
+    Improve story quality before analysis for richer insights
+  </Card>
+  <Card title="Blockchain Verification" icon="shield-check" href="/features/blockchain-storage">
+    Understand how CRE creates tamper-proof insight attestations
+  </Card>
+</CardGroup>

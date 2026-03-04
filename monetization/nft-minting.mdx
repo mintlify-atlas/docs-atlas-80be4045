@@ -1,0 +1,441 @@
+---
+title: 'NFT Minting'
+description: 'Turn your story collections into ERC721 NFTs with on-chain royalties'
+icon: 'image'
+---
+
+## Overview
+
+iStory lets you mint story collections as NFTs (non-fungible tokens) on Base. Transform your journal entries into permanent, tradable digital artifacts stored on IPFS with on-chain metadata.
+
+<Info>
+  NFTs are minted via the `StoryNFT` ERC721 contract with built-in ERC2981 royalties.
+</Info>
+
+## What Are Story NFTs?
+
+Story NFTs are:
+
+- **ERC721 tokens**: Unique, non-fungible assets on Base blockchain
+- **Book collections**: Curated groups of stories (e.g., "Summer 2024 Reflections")
+- **IPFS-stored**: Metadata and content hosted on decentralized storage
+- **Royalty-enabled**: Earn 5% on secondary sales (ERC2981 standard)
+- **Ownable**: Transferred, traded, or held as digital collectibles
+
+<Tip>
+  Think of NFT books as **permanent time capsules** — your stories preserved forever on-chain.
+</Tip>
+
+## NFT Types
+
+<CardGroup cols={2}>
+  <Card title="Book Collections" icon="book">
+    **Public Minting** (0.001 ETH fee)
+    
+    Self-published compilations of your stories. Create thematic collections like "Travel Adventures" or "2024 Gratitude Journal."
+  </Card>
+  <Card title="Weekly Winners" icon="trophy">
+    **Admin-Minted** (Free)
+    
+    Awarded to top creators each week based on engagement and quality metrics. Minted by platform admins.
+  </Card>
+</CardGroup>
+
+## Creating a Book NFT
+
+### Step-by-Step Guide
+
+<Steps>
+  <Step title="Curate Your Stories">
+    Navigate to `/library` and select stories to include:
+    - Minimum 3 stories recommended
+    - Choose a cohesive theme or timeframe
+    - Stories can be public or private (metadata is encrypted for private)
+  </Step>
+  <Step title="Open Book Creator">
+    Click "Create Book" in the library navigation.
+    
+    Fill in metadata:
+    - **Title**: e.g., "My Year of Growth"
+    - **Description**: Brief summary (1-2 paragraphs)
+    - **Cover Image**: Upload or generate AI cover (optional)
+    - **Story Selection**: Check boxes for stories to include
+  </Step>
+  <Step title="Upload to IPFS">
+    The app packages your book metadata as JSON and uploads to Pinata:
+    ```json
+    {
+      "name": "My Year of Growth",
+      "description": "Reflections from 2024...",
+      "image": "ipfs://Qm...",
+      "properties": {
+        "story_count": 12,
+        "author": "0xYourWallet...",
+        "created_at": "2024-03-04T..."
+      },
+      "stories": [
+        { "id": "uuid1", "title": "First Entry", "ipfs_uri": "ipfs://..." },
+        ...
+      ]
+    }
+    ```
+  </Step>
+  <Step title="Mint NFT">
+    Click "Mint Book NFT" to execute the on-chain transaction:
+    ```solidity
+    // Source: contracts/StoryNFT.sol:34-40
+    function mintBook(string memory uri) external payable {
+      require(msg.value >= mintFee, "Insufficient mint fee");
+      uint256 tokenId = ++_nextTokenId;
+      _safeMint(msg.sender, tokenId);
+      _setTokenURI(tokenId, uri);
+      emit NFTMinted(tokenId, msg.sender, uri, "BOOK");
+    }
+    ```
+  </Step>
+  <Step title="Confirm in Wallet">
+    Sign the transaction in MetaMask:
+    - **Gas cost**: ~$0.01 on Base
+    - **Mint fee**: 0.001 ETH
+    - **Total**: ~$0.01 + 0.001 ETH
+  </Step>
+  <Step title="NFT Minted!">
+    Your NFT appears in:
+    - iStory library under "My Books"
+    - Your wallet (MetaMask NFT tab)
+    - OpenSea Base collection
+  </Step>
+</Steps>
+
+### Using the Hook
+
+```typescript
+// Source: app/hooks/useStoryNFT.ts:8-26
+import { useStoryNFT } from "@/app/hooks/useStoryNFT";
+
+const { mintBook, isPending, hash } = useStoryNFT();
+
+const handleMint = async () => {
+  const ipfsUri = "ipfs://Qm..."; // IPFS hash from Pinata upload
+  await mintBook(ipfsUri);
+};
+
+// Listen for success
+useEffect(() => {
+  if (isConfirmed) {
+    toast.success("Book minted successfully!");
+  }
+}, [isConfirmed]);
+```
+
+## Book Page
+
+Each minted NFT gets a dedicated page at `/books/[bookId]`.
+
+### Page Features
+
+- **Gradient Cover Header**: Eye-catching visual with book title and description
+- **Author Card**: Avatar, name, and wallet address
+- **Publication Stats**: Mint date, chapter count, IPFS hash
+- **Table of Contents**: Interactive list of all stories in the book
+- **Chapter Links**: Click any entry to read the full story at `/story/[id]`
+- **IPFS Gateway Button**: View raw metadata on Pinata gateway
+
+```tsx
+// Source: app/books/[bookId]/BookPageClient.tsx:73-84
+const { data: bookData } = await supabase
+  .from("books")
+  .select(`
+    *,
+    author:users!books_author_id_fkey (name, wallet_address, avatar)
+  `)
+  .eq("id", bookId)
+  .single();
+
+const { data: storiesData } = await supabase
+  .from("stories")
+  .select("id, title, content, created_at")
+  .in("id", bookData.story_ids);
+```
+
+<Tip>
+  Book pages are **SEO-optimized** with OpenGraph metadata for social sharing.
+</Tip>
+
+## NFT Contract Details
+
+### Smart Contract
+
+| Property | Value |
+|----------|-------|
+| **Contract Name** | StoryNFT |
+| **Symbol** | ESTORY |
+| **Standard** | ERC721 + ERC721URIStorage + ERC2981 |
+| **Network** | Base Sepolia (Testnet) → Base Mainnet |
+| **Address** | `0x6D37ebc5...` |
+| **Mint Fee** | 0.001 ETH |
+| **Royalty** | 5% (500 basis points) |
+
+### Key Functions
+
+```solidity
+// Source: contracts/StoryNFT.sol
+
+// 1. Public Mint (Book Collections)
+function mintBook(string memory uri) external payable
+
+// 2. Admin Mint (Weekly Winners)
+function mintWeeklyWinner(address winner, string memory uri) 
+  external onlyRole(MINTER_ROLE)
+
+// 3. Update Mint Fee
+function setMintFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE)
+
+// 4. Withdraw Fees
+function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE)
+
+// 5. Set Royalties
+function setDefaultRoyalty(address receiver, uint96 feeNumerator) 
+  external onlyRole(DEFAULT_ADMIN_ROLE)
+```
+
+<Note>
+  The contract uses **AccessControl** for role-based permissions and **ERC2981** for automatic royalty payments on marketplaces.
+</Note>
+
+## Royalties and Secondary Sales
+
+Earn passive income when your NFTs are resold.
+
+### How Royalties Work
+
+1. **Initial Sale**: You mint and list your book NFT on OpenSea for 0.1 ETH
+2. **Buyer Purchases**: Collector buys it — you receive 0.1 ETH minus marketplace fee (~2.5%)
+3. **Resale**: Collector resells for 0.5 ETH to another buyer
+4. **Royalty Payment**: You automatically receive 5% × 0.5 ETH = **0.025 ETH**
+5. **Forever**: Every subsequent sale pays you 5%
+
+### ERC2981 Implementation
+
+```solidity
+// Source: contracts/StoryNFT.sol:21-22
+// Set default royalty to 5% (500 basis points)
+_setDefaultRoyalty(defaultAdmin, 500);
+```
+
+Marketplaces like OpenSea read this on-chain and **automatically** send royalty payments to your wallet.
+
+<Info>
+  Royalties are enforced at the marketplace level. Most major NFT platforms support ERC2981.
+</Info>
+
+## Viewing Your NFTs
+
+### In iStory
+
+1. Navigate to `/library`
+2. Click **"My Books"** tab
+3. See all minted NFTs with:
+   - Cover image
+   - Title and description
+   - Chapter count
+   - Mint date
+
+### On OpenSea
+
+1. Visit [OpenSea Base](https://opensea.io/)
+2. Connect wallet
+3. Go to Profile → "Collected"
+4. Filter by "eStory Collections"
+5. View, list, or transfer your NFTs
+
+### In MetaMask
+
+1. Open MetaMask mobile app
+2. Tap "NFTs" tab
+3. Your StoryNFT books appear with metadata
+
+<Tip>
+  Use **MetaMask mobile** for the best NFT viewing experience — desktop extension has limited NFT support.
+</Tip>
+
+## IPFS Metadata Structure
+
+Your book NFT metadata follows the OpenSea standard:
+
+```json
+{
+  "name": "My Year of Growth",
+  "description": "A collection of reflections from 2024...",
+  "image": "ipfs://QmImageHash...",
+  "external_url": "https://istory.app/books/uuid",
+  "attributes": [
+    { "trait_type": "Story Count", "value": 12 },
+    { "trait_type": "Theme", "value": "Personal Growth" },
+    { "trait_type": "Year", "value": 2024 }
+  ],
+  "properties": {
+    "author": "0xYourWallet...",
+    "created_at": "2024-03-04T12:00:00Z",
+    "story_ids": ["uuid1", "uuid2", ...],
+    "ipfs_stories": [
+      { "id": "uuid1", "title": "First Entry", "ipfs_uri": "ipfs://..." }
+    ]
+  }
+}
+```
+
+### IPFS Pinning
+
+All metadata and story content is pinned to **Pinata** for permanent storage:
+
+```typescript
+// Source: app/utils/ipfsService.ts
+const uploadToIPFS = async (data: object) => {
+  const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${PINATA_JWT}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  const { IpfsHash } = await res.json();
+  return `ipfs://${IpfsHash}`;
+};
+```
+
+<Warning>
+  IPFS hashes are **immutable**. Once minted, you cannot change the NFT metadata. Verify everything before minting!
+</Warning>
+
+## Fees and Costs
+
+| Action | Cost | Goes To |
+|--------|------|--------|
+| **Mint Fee** | 0.001 ETH | StoryNFT contract (fund rewards pool) |
+| **Gas Fee** | ~0.0001 ETH (~$0.01) | Base network validators |
+| **IPFS Pinning** | Free (up to 1GB) | Pinata |
+| **Listing on OpenSea** | Free | — |
+| **OpenSea Sale Fee** | 2.5% of sale | OpenSea |
+| **Royalty (Resales)** | 5% of sale | You (the creator) |
+
+<Tip>
+  Total minting cost is **~0.0011 ETH** (~$2-3 depending on ETH price). Much cheaper than Ethereum L1!
+</Tip>
+
+## Weekly Winner NFTs
+
+Top creators receive exclusive, free NFTs.
+
+### Selection Criteria
+
+- **Engagement**: Likes, comments, shares, tips received
+- **Quality**: Verified metrics tier (Gold > Silver > Bronze)
+- **Consistency**: Active journaling streaks
+- **Impact**: Community interactions (follows, inspiring others)
+
+### Admin Minting Process
+
+```solidity
+// Source: contracts/StoryNFT.sol:26-31
+function mintWeeklyWinner(address winner, string memory uri) 
+  external onlyRole(MINTER_ROLE) {
+  uint256 tokenId = ++_nextTokenId;
+  _safeMint(winner, tokenId);
+  _setTokenURI(tokenId, uri);
+  emit NFTMinted(tokenId, winner, uri, "WEEKLY_WINNER");
+}
+```
+
+Winners are announced:
+- **In-app notification**: "You won this week's NFT!"
+- **Email alert**: Sent to verified email
+- **Social spotlight**: Featured on `/social` homepage
+
+<Info>
+  Weekly Winner NFTs have no mint fee and include a special "Winner" badge in metadata.
+</Info>
+
+## Trading and Transfers
+
+Your NFTs are fully owned and transferable.
+
+### Listing on OpenSea
+
+1. Go to [OpenSea](https://opensea.io/)
+2. Connect wallet with your NFT
+3. Navigate to your NFT page
+4. Click "Sell" → Set price and duration
+5. Sign listing transaction (free on OpenSea)
+6. NFT listed! Buyers can purchase instantly
+
+### Direct Transfer
+
+Send your NFT to another wallet:
+
+```typescript
+// Using ethers.js or viem
+const contract = new ethers.Contract(STORY_NFT_ADDRESS, STORY_NFT_ABI, signer);
+await contract.transferFrom(yourAddress, recipientAddress, tokenId);
+```
+
+Or use MetaMask/OpenSea UI for transfers.
+
+<Warning>
+  Double-check recipient addresses. NFT transfers are irreversible!
+</Warning>
+
+## Best Practices
+
+### Curation
+
+- **Quality over quantity**: 5 great stories > 20 mediocre ones
+- **Thematic coherence**: "Summer 2024" or "Career Reflections" work better than random assortments
+- **Timeline**: Chronological order often creates compelling narratives
+
+### Metadata
+
+- **Descriptive titles**: "My Journey to Mindfulness" > "Book 1"
+- **Rich descriptions**: Include themes, key moments, emotional arcs
+- **Custom covers**: AI-generated or designed covers stand out on marketplaces
+
+### Pricing (OpenSea)
+
+- **First editions**: Start low (0.05-0.1 ETH) to build collector base
+- **Established creators**: Can price higher based on following
+- **Scarcity**: Limited collections (e.g., "Only 10 copies") command premium
+
+## Security
+
+### Smart Contract Audits
+
+<Note>
+  The StoryNFT contract uses **OpenZeppelin** battle-tested libraries:
+  - ERC721URIStorage (safe minting)
+  - AccessControl (role permissions)
+  - ERC2981 (royalty standard)
+</Note>
+
+### IPFS Persistence
+
+Pinata ensures your metadata remains accessible:
+
+- **Redundant nodes**: Pinned to 3+ IPFS nodes globally
+- **Uptime**: 99.9% availability SLA
+- **Backup**: iStory maintains Pinata account with paid plan
+
+<Tip>
+  For extra safety, you can **re-pin** your IPFS hashes to your own Pinata account.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Earning $STORY" icon="coins" href="/monetization/earning">
+    Learn how tips and paywalls fund your creative journey
+  </Card>
+  <Card title="Community Feed" icon="users" href="/social/community-feed">
+    Publish stories to gain followers and sell more NFTs
+  </Card>
+</CardGroup>

@@ -1,0 +1,478 @@
+---
+title: 'StoryProtocol'
+description: 'Tip creators and unlock paywalled content with eStoryToken'
+icon: 'handshake'
+---
+
+## Overview
+
+**StoryProtocol** handles all ESTORY token transfers between users:
+
+- **Tipping**: Send ESTORY to creators to show appreciation
+- **Paywalls**: Pay to unlock premium content
+- **Safe Transfers**: Uses OpenZeppelin's `SafeERC20` to prevent silent failures
+- **Reentrancy Protection**: `nonReentrant` guard on all payment functions
+- **Pausable**: Admin can pause payments in emergencies
+
+### Contract Address
+
+<CodeGroup>
+```typescript Address
+const STORY_PROTOCOL_ADDRESS = "0xA51a4cA00cC4C81A5F7cB916D0BFa1a4aD6f4a71";
+```
+
+```bash Base Sepolia Explorer
+https://sepolia.basescan.org/address/0xA51a4cA00cC4C81A5F7cB916D0BFa1a4aD6f4a71
+```
+</CodeGroup>
+
+## Contract Code
+
+```solidity contracts/StoryProtocol.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract StoryProtocol is ReentrancyGuard, Pausable, AccessControl {
+    using SafeERC20 for IERC20;
+
+    IERC20 public immutable storyToken;
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+    event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId);
+    event ContentUnlocked(address indexed payer, address indexed author, uint256 amount, uint256 indexed contentId);
+
+    constructor(address _tokenAddress, address initialAdmin) {
+        storyToken = IERC20(_tokenAddress);
+        _grantRole(DEFAULT_ADMIN_ROLE, initialAdmin);
+        _grantRole(PAUSER_ROLE, initialAdmin);
+    }
+
+    function tipCreator(address creator, uint256 amount, uint256 storyId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+    {
+        require(amount > 0, "Amount must be > 0");
+        require(creator != address(0), "Invalid creator address");
+        
+        storyToken.safeTransferFrom(msg.sender, creator, amount);
+        emit TipSent(msg.sender, creator, amount, storyId);
+    }
+
+    function payPaywall(address author, uint256 amount, uint256 contentId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+    {
+        require(amount > 0, "Amount must be > 0");
+        require(author != address(0), "Invalid author address");
+
+        storyToken.safeTransferFrom(msg.sender, author, amount);
+        emit ContentUnlocked(msg.sender, author, amount, contentId);
+    }
+
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+}
+```
+
+## Functions
+
+### tipCreator
+
+Send ESTORY tokens to a creator as a tip.
+
+```solidity
+function tipCreator(address creator, uint256 amount, uint256 storyId) external
+```
+
+<ParamField path="creator" type="address" required>
+  Creator's wallet address (recipient of tip)
+</ParamField>
+
+<ParamField path="amount" type="uint256" required>
+  Tip amount in wei (e.g., 10 ESTORY = 10 * 10^18 wei)
+</ParamField>
+
+<ParamField path="storyId" type="uint256" required>
+  Database ID of the story being tipped (for backend indexing)
+</ParamField>
+
+<ResponseField name="event" type="TipSent">
+  Emitted on success with `from`, `to`, `amount`, and `storyId`
+</ResponseField>
+
+<Warning>
+**Pre-Approval Required**: Users must approve StoryProtocol to spend ESTORY before tipping:
+
+```typescript
+await eStoryToken.approve(STORY_PROTOCOL_ADDRESS, amount);
+```
+
+Reverts if:
+- `amount` is 0
+- `creator` is address(0)
+- Insufficient allowance
+- Insufficient balance
+- Contract is paused
+</Warning>
+
+### payPaywall
+
+Pay to unlock premium content.
+
+```solidity
+function payPaywall(address author, uint256 amount, uint256 contentId) external
+```
+
+<ParamField path="author" type="address" required>
+  Author's wallet address (recipient of payment)
+</ParamField>
+
+<ParamField path="amount" type="uint256" required>
+  Payment amount in wei
+</ParamField>
+
+<ParamField path="contentId" type="uint256" required>
+  Database ID of the content being unlocked
+</ParamField>
+
+<ResponseField name="event" type="ContentUnlocked">
+  Emitted on success. Backend listens for this to grant access in Supabase.
+</ResponseField>
+
+<Note>
+**Backend Integration**: The iStory backend listens for `ContentUnlocked` events and updates the `unlocked_content` table in Supabase to grant the payer access to the content.
+</Note>
+
+### pause / unpause (Admin Only)
+
+```solidity
+function pause() external onlyRole(PAUSER_ROLE)
+function unpause() external onlyRole(PAUSER_ROLE)
+```
+
+Pauses/resumes all payment functions. Only callable by addresses with `PAUSER_ROLE`.
+
+## Events
+
+### TipSent
+
+```solidity
+event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId);
+```
+
+Emitted when a tip is sent.
+
+<ResponseField name="from" type="address">
+  Tipper's address
+</ResponseField>
+
+<ResponseField name="to" type="address">
+  Creator's address
+</ResponseField>
+
+<ResponseField name="amount" type="uint256">
+  Tip amount in wei
+</ResponseField>
+
+<ResponseField name="storyId" type="uint256">
+  Database ID of the story
+</ResponseField>
+
+### ContentUnlocked
+
+```solidity
+event ContentUnlocked(address indexed payer, address indexed author, uint256 amount, uint256 indexed contentId);
+```
+
+Emitted when content is unlocked.
+
+<ResponseField name="payer" type="address">
+  User who paid to unlock content
+</ResponseField>
+
+<ResponseField name="author" type="address">
+  Content author (recipient)
+</ResponseField>
+
+<ResponseField name="amount" type="uint256">
+  Payment amount in wei
+</ResponseField>
+
+<ResponseField name="contentId" type="uint256">
+  Database ID of the unlocked content
+</ResponseField>
+
+## Usage Examples
+
+### Tip a Creator
+
+<CodeGroup>
+```typescript React Hook
+import { useStoryProtocol } from '@/app/hooks/useStoryProtocol';
+import { useEStoryToken } from '@/app/hooks/useEStoryToken';
+import { parseEther } from 'viem';
+import { STORY_PROTOCOL_ADDRESS } from '@/lib/contracts';
+
+async function tipStory(creatorAddress: string, storyId: number) {
+  const { approve } = useEStoryToken();
+  const { tipCreator } = useStoryProtocol();
+  
+  const amount = parseEther("5"); // 5 ESTORY
+  
+  // Step 1: Approve StoryProtocol to spend tokens
+  await approve(STORY_PROTOCOL_ADDRESS, amount);
+  
+  // Step 2: Send tip
+  await tipCreator(creatorAddress, amount, BigInt(storyId));
+  
+  toast.success("Tip sent successfully!");
+}
+```
+
+```typescript Direct Contract Call
+import { walletClient, publicClient } from '@/lib/wagmi';
+import { 
+  STORY_TOKEN_ABI, 
+  STORY_TOKEN_ADDRESS,
+  STORY_PROTOCOL_ABI,
+  STORY_PROTOCOL_ADDRESS 
+} from '@/lib/contracts';
+import { parseEther } from 'viem';
+
+const amount = parseEther("5");
+const creatorAddress = "0x...";
+const storyId = 123n;
+
+// Step 1: Approve
+const approveTx = await walletClient.writeContract({
+  address: STORY_TOKEN_ADDRESS,
+  abi: STORY_TOKEN_ABI,
+  functionName: 'approve',
+  args: [STORY_PROTOCOL_ADDRESS, amount]
+});
+await publicClient.waitForTransactionReceipt({ hash: approveTx });
+
+// Step 2: Tip
+const tipTx = await walletClient.writeContract({
+  address: STORY_PROTOCOL_ADDRESS,
+  abi: STORY_PROTOCOL_ABI,
+  functionName: 'tipCreator',
+  args: [creatorAddress, amount, storyId]
+});
+await publicClient.waitForTransactionReceipt({ hash: tipTx });
+```
+</CodeGroup>
+
+### Unlock Paywalled Content
+
+```typescript Paywall Flow
+import { useStoryProtocol } from '@/app/hooks/useStoryProtocol';
+import { parseEther } from 'viem';
+
+async function unlockContent(authorAddress: string, contentId: number, price: string) {
+  const { approve } = useEStoryToken();
+  const { payPaywall } = useStoryProtocol();
+  
+  const amount = parseEther(price); // e.g., "2.5" ESTORY
+  
+  // Step 1: Approve payment
+  await approve(STORY_PROTOCOL_ADDRESS, amount);
+  
+  // Step 2: Pay paywall
+  await payPaywall(authorAddress, amount, BigInt(contentId));
+  
+  // Step 3: Backend listens for ContentUnlocked event and grants access
+  // Frontend polls /api/paywall/check?contentId=123 until access is granted
+}
+```
+
+### Listen for Events (Backend)
+
+```typescript Backend Event Listener
+import { publicClient } from '@/lib/wagmi';
+import { STORY_PROTOCOL_ABI, STORY_PROTOCOL_ADDRESS } from '@/lib/contracts';
+import { supabaseAdmin } from '@/app/utils/supabase/supabaseAdmin';
+
+// Listen for ContentUnlocked events
+const unwatch = publicClient.watchContractEvent({
+  address: STORY_PROTOCOL_ADDRESS,
+  abi: STORY_PROTOCOL_ABI,
+  eventName: 'ContentUnlocked',
+  onLogs: async (logs) => {
+    for (const log of logs) {
+      const { payer, author, amount, contentId } = log.args;
+      
+      // Grant access in Supabase
+      await supabaseAdmin.from('unlocked_content').insert({
+        user_id: payer,
+        content_id: contentId.toString(),
+        author_id: author,
+        amount_paid: amount.toString(),
+        unlocked_at: new Date().toISOString()
+      });
+      
+      console.log(`Content ${contentId} unlocked for ${payer}`);
+    }
+  }
+});
+```
+
+## Security Features
+
+### SafeERC20
+
+StoryProtocol uses OpenZeppelin's `SafeERC20.safeTransferFrom()` instead of raw `transferFrom()`:
+
+```solidity
+// ✅ Good: Reverts if transfer fails
+storyToken.safeTransferFrom(msg.sender, creator, amount);
+
+// ❌ Bad: Returns false on failure (easy to miss)
+storyToken.transferFrom(msg.sender, creator, amount);
+```
+
+<Note>
+`safeTransferFrom()` reverts if:
+- Token transfer returns `false`
+- Token doesn't return a boolean (some ERC20s)
+- Token reverts
+
+This prevents silent failures and loss of funds.
+</Note>
+
+### Reentrancy Protection
+
+All payment functions use `nonReentrant` modifier:
+
+```solidity
+function tipCreator(...) external nonReentrant whenNotPaused {
+    // Safe from reentrancy attacks
+    storyToken.safeTransferFrom(msg.sender, creator, amount);
+}
+```
+
+<Warning>
+**Why Reentrancy Protection?**
+
+Even though ESTORY token is a standard ERC20 (no hooks), `nonReentrant` protects against:
+- Future upgrades to the token contract
+- Malicious ERC777-style tokens if contract is used with other tokens
+- Cross-function reentrancy
+
+Best practice: Always use `nonReentrant` on functions that transfer value.
+</Warning>
+
+### Validation
+
+All inputs are validated:
+
+```solidity
+require(amount > 0, "Amount must be > 0");
+require(creator != address(0), "Invalid creator address");
+```
+
+Prevents:
+- Zero-value transactions (gas waste)
+- Sending tokens to address(0) (burns tokens unintentionally)
+
+## Gas Optimization
+
+<Accordion title="Immutable storyToken">
+  ```solidity
+  IERC20 public immutable storyToken;
+  ```
+  
+  `immutable` keyword bakes the token address into the contract bytecode at deployment.
+  
+  **Gas Savings**: ~2100 gas per read (vs. storage slot read)
+</Accordion>
+
+<Accordion title="Indexed Event Parameters">
+  ```solidity
+  event TipSent(
+      address indexed from,
+      address indexed to,
+      uint256 amount,
+      uint256 indexed storyId
+  );
+  ```
+  
+  `indexed` parameters are stored in the event log's topics (not data), enabling efficient filtering:
+  
+  ```typescript
+  // Filter tips to a specific creator
+  publicClient.getLogs({
+    event: parseAbiItem('event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId)'),
+    args: { to: creatorAddress }
+  });
+  ```
+</Accordion>
+
+## ABI Reference
+
+```typescript lib/contracts.ts
+export const STORY_PROTOCOL_ABI = [
+  "function tipCreator(address creator, uint256 amount, uint256 storyId)",
+  "function payPaywall(address author, uint256 amount, uint256 contentId)",
+  "event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId)",
+  "event ContentUnlocked(address indexed payer, address indexed author, uint256 amount, uint256 indexed contentId)"
+] as const;
+```
+
+## Common Errors
+
+<AccordionGroup>
+  <Accordion title="ERC20: insufficient allowance">
+    User hasn't approved StoryProtocol to spend ESTORY tokens.
+    
+    **Fix**: Call `eStoryToken.approve(STORY_PROTOCOL_ADDRESS, amount)` before tipping/paying.
+  </Accordion>
+  
+  <Accordion title="ERC20: transfer amount exceeds balance">
+    User doesn't have enough ESTORY tokens.
+    
+    **Fix**: Check balance with `eStoryToken.balanceOf(userAddress)` before attempting payment.
+  </Accordion>
+  
+  <Accordion title="Amount must be > 0">
+    Tried to send 0 tokens.
+    
+    **Fix**: Ensure `amount > 0` before calling the function.
+  </Accordion>
+  
+  <Accordion title="Invalid creator address">
+    Tried to send tokens to address(0).
+    
+    **Fix**: Validate recipient address is not zero address.
+  </Accordion>
+  
+  <Accordion title="Token transfer while paused">
+    ESTORY token contract is paused (admin emergency action).
+    
+    **Fix**: Wait for admin to call `unpause()` on eStoryToken.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="eStoryToken" icon="coins" href="/contracts/istory-token">
+    Learn about token approvals and balances
+  </Card>
+  <Card title="StoryNFT" icon="image" href="/contracts/story-nft">
+    Mint NFT collections from your stories
+  </Card>
+</CardGroup>

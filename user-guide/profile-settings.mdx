@@ -1,0 +1,519 @@
+---
+title: 'Profile & Settings'
+description: 'Customize your profile, manage linked accounts, and configure local vault encryption'
+icon: 'user-gear'
+---
+
+## Overview
+
+Your **Profile** page is mission control for account management, achievement tracking, and privacy settings. Customize your identity, link multiple auth methods, and monitor your journaling progress.
+
+<Info>
+  **Four Main Tabs:** Overview (goals + weekly reflection), Achievements, Activity (heatmap + history), Settings (profile + accounts + vault).
+</Info>
+
+## Profile Sidebar
+
+### User Information (app/profile/ProfilePageClient.tsx:545-652)
+
+<CardGroup cols={1}>
+  <Card title="Profile Card" icon="user">
+    **Displays:**
+    - Avatar (from Google or uploaded image)
+    - Display name
+    - Bio (short description)
+    - Location (optional)
+    - Website link (optional)
+    - Wallet address (truncated: 0x1234...5678)
+    - ETH balance (from Wagmi)
+    - Member since date
+    
+    <Tip>
+      Click **Edit Profile** to update any of these fields in Settings tab.
+    </Tip>
+  </Card>
+  
+  <Card title="Quick Stats" icon="chart-simple">
+    **Your Impact:**
+    - 📖 Total Stories
+    - ❤️ Total Likes
+    - 👁️ Total Views
+    - 🪙 Books Created
+    
+    <Info>
+      Stats update in real-time. Calculated on page load from Supabase queries.
+    </Info>
+  </Card>
+</CardGroup>
+
+## Overview Tab
+
+### Writing Goals (app/profile/ProfilePageClient.tsx:690-722)
+
+<Steps>
+  <Step title="Daily Writing Streak">
+    Tracks consecutive days with at least one story saved.
+    
+    **Algorithm (ProfilePageClient.tsx:293-317):**
+    1. Map all stories to dates (yyyy-mm-dd format)
+    2. Starting today, check each previous day
+    3. Increment counter if day has stories
+    4. Stop at first day with no activity
+    
+    **Streak Logic:**
+    - Counts backward from today
+    - Allows "grace day" if today just started (haven't posted yet)
+    - Resets to 0 if you miss a day
+    
+    <Tip>
+      Aim for 7-day streak to unlock "Consistent Writer" achievement.
+    </Tip>
+  </Step>
+
+  <Step title="Monthly Stories Goal">
+    Progress toward 10 stories per month.
+    
+    **Calculation:**
+    - Filters stories by current month + year
+    - Shows as "X/10 stories"
+    - Progress bar fills proportionally
+    
+    <Info>
+      Month is based on `created_at` (when you saved), not `story_date`.
+    </Info>
+  </Step>
+
+  <Step title="Community Engagement">
+    Tracks total likes received across all public stories.
+    
+    **Target:** 100 likes
+    
+    <Tip>
+      Make stories public and share on social feed to earn likes faster.
+    </Tip>
+  </Step>
+</Steps>
+
+### Weekly Reflection (components/WeeklyReflection.tsx)
+
+<Accordion title="AI-Generated Weekly Summary">
+  **Automatic Insights:**
+  
+  At the end of each week (Sunday), iStory generates:
+  - Summary of themes from week's stories
+  - Emotional tone analysis
+  - Key moments highlighted
+  - Suggestions for next week
+  
+  **How to View:**
+  - Appears in Profile Overview tab
+  - Also accessible from Library "Weekly Reflections" section
+  - Saved to `weekly_reflections` table
+  
+  <Info>
+    Requires at least 3 stories in past week to generate reflection.
+  </Info>
+</Accordion>
+
+### Daily Journal Compilation (app/profile/ProfilePageClient.tsx:444-496)
+
+<Accordion title="Quick Book Creation">
+  **If you recorded 2+ stories today:**
+  
+  A special card appears:
+  - "Daily Recap Available"
+  - Shows count of today's stories
+  - **Compile Daily Journal** button
+  
+  **What it does:**
+  1. Bundles all today's stories
+  2. Creates IPFS metadata with date-specific title
+  3. Mints NFT book (0.001 ETH fee)
+  4. Saves to `books` table
+  5. Updates book count stat
+  
+  <Tip>
+    Great for daily journaling habit—creates one book per day.
+  </Tip>
+</Accordion>
+
+## Achievements Tab
+
+### Achievement System (app/profile/ProfilePageClient.tsx:360-368)
+
+<CardGroup cols={2}>
+  <Card title="First Story" icon="star">
+    Recorded your first journal entry.
+    
+    **Unlocked:** After saving 1 story.
+  </Card>
+  
+  <Card title="Prolific Writer" icon="pen">
+    Recorded 10+ stories.
+    
+    **Unlocked:** After saving 10 stories.
+  </Card>
+  
+  <Card title="Community Star" icon="heart">
+    Received 50+ total likes.
+    
+    **Unlocked:** When sum of all story likes ≥ 50.
+  </Card>
+  
+  <Card title="Book Author" icon="book">
+    Compiled your first digital book.
+    
+    **Unlocked:** After minting 1 NFT book.
+  </Card>
+  
+  <Card title="Daily Grinder" icon="zap">
+    Wrote 3 stories in one day.
+    
+    **Unlocked:** When any single day has ≥ 3 stories.
+  </Card>
+  
+  <Card title="Vocalist" icon="microphone">
+    Recorded a story with audio.
+    
+    **Unlocked:** After saving story with `has_audio: true`.
+  </Card>
+</CardGroup>
+
+<Info>
+  **Visual States:**
+  - 🎖️ **Earned:** Green background, checkmark, date shown
+  - ⚪ **Locked:** Gray background, reduced opacity
+</Info>
+
+## Activity Tab
+
+### Contribution Heatmap (app/profile/ProfilePageClient.tsx:769-841)
+
+<Accordion title="GitHub-Style Activity Grid">
+  **How it works:**
+  
+  **Grid Layout:**
+  - Last 52 weeks displayed
+  - 7 rows (Sun-Sat) × ~52 columns
+  - Each cell = one day
+  - Aligned to Sunday as week start
+  
+  **Color Scale:**
+  - ⬜ Gray: No stories (0 count)
+  - 🟢 Light Green: 1 story
+  - 🟢 Medium Green: 2-3 stories
+  - 🟢 Dark Green: 4+ stories
+  
+  **Data Source:**
+  - Stories mapped to dates via `created_at`
+  - Counts aggregated by date
+  - Hover shows date + story count tooltip
+  
+  <Tip>
+    Consistent green squares = strong writing habit!
+  </Tip>
+</Accordion>
+
+### Recent Activity List (app/profile/ProfilePageClient.tsx:843-881)
+
+<Accordion title="Last 14 Days Breakdown">
+  **Per-Day Statistics:**
+  
+  For each active day in past 2 weeks:
+  - Date (e.g., "Monday, Mar 4")
+  - 📖 Entry count (stories written)
+  - ❤️ Likes received (sum across day's stories)
+  
+  **Sorting:** Newest day first (descending)
+  
+  <Info>
+    Only shows days with activity. Inactive days are hidden.
+  </Info>
+</Accordion>
+
+## Settings Tab
+
+### Profile Settings Form (app/profile/ProfilePageClient.tsx:887-924)
+
+<Steps>
+  <Step title="Edit Profile Fields">
+    **Editable Information:**
+    - **Display Name**: Your public name
+    - **Username**: Unique handle (alphanumeric + underscores)
+    - **Bio**: Short description (280 chars max recommended)
+    - **Location**: City/country (optional)
+    - **Website**: Personal site or social link
+    
+    <Info>
+      Changes save to `users` table via Supabase update query.
+    </Info>
+  </Step>
+
+  <Step title="Save Changes">
+    Click **Save Changes** button:
+    
+    **What happens:**
+    1. Form validation (no empty required fields)
+    2. Supabase update: `users.update(formData).eq('id', authInfo.id)`
+    3. Success toast: "Profile updated!"
+    4. Auto-switch to Overview tab
+    
+    <Warning>
+      Username must be unique. Save fails if username already taken.
+    </Warning>
+  </Step>
+
+  <Step title="Email Notification (Optional)">
+    If email changed and notifications enabled:
+    
+    **Welcome Email Sent:**
+    - Uses Resend API
+    - Confirms profile setup
+    - Includes quick start guide
+    
+    <Info>
+      Email service: `emailService.sendWelcomeEmail()` (app/utils/emailService.ts).
+    </Info>
+  </Step>
+</Steps>
+
+### Linked Accounts (app/profile/ProfilePageClient.tsx:926-1027)
+
+<Accordion title="Managing Authentication Methods">
+  **Linking Status:**
+  
+  | Account Type | Check | Indicator |
+  |--------------|-------|----------|
+  | **Google** | `authInfo?.google_id` exists | ✅ Linked (email) / ⬜ Not linked |
+  | **Wallet** | `authInfo?.wallet_address` exists | ✅ Linked (0x123...456) / ⬜ Not linked |
+  
+  **Link Wallet (Google → Wallet):**
+  1. Sign in with Google
+  2. Click **Link Wallet** in Settings
+  3. If no wallet connected, RainbowKit modal opens
+  4. After connection, sign message to prove ownership
+  5. Server verifies signature via `/api/auth/link-account`
+  6. Profile updated: `auth_provider: 'both'`
+  
+  **Link Google (Wallet → Google):**
+  1. Sign in with wallet
+  2. Click **Link Google** in Settings
+  3. Sign message to get secure linking token
+  4. OAuth flow initiates (stored in `sessionStorage`)
+  5. After OAuth, AuthProvider matches token + completes link
+  6. Profile updated with `google_id` + `auth_provider: 'both'`
+  
+  <Info>
+    **Security:** Linking requires cryptographic signature to prevent account hijacking.
+  </Info>
+</Accordion>
+
+## Vault Encryption
+
+### Local Vault Settings (components/vault/VaultSettings.tsx)
+
+<Steps>
+  <Step title="What is the Vault?">
+    **Client-side encryption layer:**
+    
+    - Stories encrypted with AES-256-GCM before saving to IndexedDB
+    - PIN never leaves your device
+    - DEK (Data Encryption Key) derived from PIN via PBKDF2 (100,000 iterations)
+    - KEK (Key Encryption Key) wraps DEK using AES-KW
+    - Decryption only possible when vault unlocked
+    
+    <Info>
+      **Architecture:** PIN → PBKDF2 → KEK → wraps DEK → encrypts content.
+    </Info>
+  </Step>
+
+  <Step title="Set Up Vault">
+    **Initial Setup:**
+    
+    1. Navigate to Profile → Settings → Local Vault
+    2. Click **Set Up Vault**
+    3. Create 6-digit PIN
+    4. Confirm PIN
+    5. Vault initialized (DEK generated, wrapped with PIN-derived KEK)
+    6. Stored in IndexedDB: `vault.vault_keys` table
+    
+    <Warning>
+      **If you forget your PIN, encrypted data is unrecoverable.** No backdoor exists.
+    </Warning>
+  </Step>
+
+  <Step title="Unlock Vault">
+    **Before accessing encrypted stories:**
+    
+    1. Click **Unlock Vault**
+    2. Enter 6-digit PIN
+    3. KEK derived from PIN + stored salt
+    4. DEK unwrapped with KEK
+    5. DEK held in memory for session
+    6. Encrypted stories decrypted on-demand
+    
+    <Info>
+      Vault auto-locks on sign-out. DEKs cleared from memory via `clearAllKeys()`.
+    </Info>
+  </Step>
+
+  <Step title="Change PIN">
+    **Re-encrypt DEK with new PIN:**
+    
+    1. Vault must be unlocked
+    2. Click **Change PIN**
+    3. Enter current PIN (verification)
+    4. Enter new PIN
+    5. Confirm new PIN
+    6. New KEK derived from new PIN
+    7. DEK re-wrapped with new KEK
+    8. Updated in `vault_keys` table
+    
+    <Tip>
+      Changing PIN does **not** re-encrypt stories—only re-wraps the DEK.
+    </Tip>
+  </Step>
+</Steps>
+
+### Vault Integration (lib/vault/)
+
+<Accordion title="How Vault Works with Stories">
+  **Save Flow (with vault enabled):**
+  
+  1. User saves story via `/record`
+  2. Story saves to cloud (Supabase + IPFS)
+  3. If vault unlocked: `getDEK(userId)` retrieves DEK from memory
+  4. Title + content encrypted with `encryptString(text, dek)`
+  5. Ciphertext + IV stored in IndexedDB
+  6. Checksum (SHA-256) stored for integrity verification
+  7. Linked to cloud via `cloud_id` field
+  
+  **Read Flow:**
+  
+  1. `useLocalStories()` hook queries IndexedDB
+  2. Returns encrypted records
+  3. If vault unlocked: `decryptString(ciphertext, iv, dek)`
+  4. Decrypted stories rendered in UI
+  5. If vault locked: Shows "Unlock vault to view" placeholder
+  
+  <Info>
+    **Non-blocking:** Vault save failure never prevents cloud save success.
+  </Info>
+</Accordion>
+
+### Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Strong PIN" icon="shield">
+    - Avoid simple patterns (123456, 111111)
+    - Don't reuse PINs from other services
+    - 6 random digits recommended
+  </Card>
+  
+  <Card title="Store PIN Securely" icon="key">
+    - Write it down physically (not digitally)
+    - Store in password manager
+    - **Never** share with anyone
+  </Card>
+  
+  <Card title="Lock Vault When Away" icon="lock">
+    - Click **Lock Vault** before stepping away
+    - Auto-locks on sign-out
+    - Prevents unauthorized access if device left open
+  </Card>
+  
+  <Card title="Test Recovery" icon="rotate">
+    - Save test story with vault
+    - Lock vault, unlock with PIN
+    - Verify story decrypts correctly
+  </Card>
+</CardGroup>
+
+## Preferences
+
+### Notification Settings (app/profile/ProfilePageClient.tsx:1034-1069)
+
+<Accordion title="Email Notifications">
+  **Toggle on/off:**
+  - New follower alerts (future feature)
+  - Tip received notifications
+  - Weekly reflection summaries
+  - System announcements
+  
+  <Info>
+    Currently local UI state. Will persist to database in future update.
+  </Info>
+</Accordion>
+
+<Accordion title="Public Profile">
+  **Controls social feed visibility:**
+  - **Public:** Your public stories appear on social feed
+  - **Private:** All stories hidden from social feed (even public ones)
+  
+  <Warning>
+    Turning profile private hides **all** public stories, not just future ones.
+  </Warning>
+</Accordion>
+
+<Accordion title="AI Enhancements">
+  **Auto-suggest improvements:**
+  - Grammar/punctuation fixes
+  - Sentence flow improvements
+  - Clarity suggestions
+  
+  <Info>
+    Disabled by default. Enable to see AI suggestions after transcription.
+  </Info>
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Streak shows 0 but I posted yesterday">
+    **Timezone Mismatch:**
+    - Streak uses server timestamp (UTC)
+    - Your local time might be in different day
+    
+    **Solution:**
+    - Check `created_at` timestamps in database
+    - Post earlier in your timezone
+    - Streak recalculates on page load
+  </Accordion>
+
+  <Accordion title="Vault unlock fails - 'Invalid PIN'">
+    **Possible causes:**
+    - Typo in PIN entry
+    - Caps Lock on (if using keyboard shortcuts)
+    - Browser IndexedDB corrupted
+    
+    **Solution:**
+    1. Try entering PIN carefully
+    2. Check browser console for crypto errors
+    3. If truly forgotten, no recovery possible
+    4. Clear IndexedDB and set up new vault (loses encrypted stories)
+  </Accordion>
+
+  <Accordion title="Profile picture not updating">
+    **Avatar Source Priority:**
+    1. Manually uploaded avatar (future feature)
+    2. Google OAuth avatar
+    3. Default avatar based on first letter of name
+    
+    **Solution:**
+    - If using Google, update Google profile picture
+    - Sign out and sign in again
+    - Clear browser cache
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Record More Stories" icon="microphone" href="/user-guide/recording-stories">
+    Build your streak and unlock achievements.
+  </Card>
+  
+  <Card title="Explore Social Feed" icon="users" href="/social/community-feed">
+    Share your public stories with the community.
+  </Card>
+</CardGroup>

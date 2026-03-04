@@ -1,0 +1,639 @@
+---
+title: "Database Schema"
+description: "PostgreSQL schema, migrations, and Row Level Security policies"
+icon: "database"
+---
+
+## Overview
+
+iStory uses **Supabase (PostgreSQL)** for data persistence with Row Level Security (RLS) policies for defense-in-depth protection. All database changes are managed through migration files.
+
+<Info>
+Database migrations are located in `~/workspace/source/supabase/migrations/` and should be run in order.
+</Info>
+
+## Core Tables
+
+### users
+
+Stores user account information for both OAuth and wallet authentication.
+
+<CodeGroup>
+```sql Schema
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet_address TEXT UNIQUE,
+  email TEXT UNIQUE,
+  username TEXT UNIQUE,
+  name TEXT,
+  bio TEXT,
+  avatar_url TEXT,
+  
+  -- OAuth fields
+  google_id TEXT UNIQUE,
+  google_email TEXT,
+  google_avatar TEXT,
+  auth_provider TEXT CHECK (auth_provider IN ('wallet', 'google', 'linked')),
+  
+  -- Profile metadata
+  location TEXT,
+  website TEXT,
+  writing_streak INT DEFAULT 0,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_wallet ON users(wallet_address);
+CREATE INDEX idx_users_google ON users(google_id);
+CREATE INDEX idx_users_email ON users(email);
+```
+</CodeGroup>
+
+<Accordion title="Field Descriptions">
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Primary key |
+| `wallet_address` | TEXT | Ethereum wallet address (lowercase) |
+| `email` | TEXT | Email address (from OAuth or manual) |
+| `username` | TEXT | Unique username for profile URLs |
+| `google_id` | TEXT | Google OAuth user ID |
+| `auth_provider` | TEXT | 'wallet', 'google', or 'linked' |
+| `writing_streak` | INT | Consecutive days with stories |
+</Accordion>
+
+### stories
+
+Stores user-created journal entries and stories.
+
+<CodeGroup>
+```sql Schema
+CREATE TABLE stories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  author_wallet TEXT NOT NULL,
+  
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  audio_url TEXT,
+  
+  -- Metadata
+  mood TEXT,
+  tags TEXT[] DEFAULT '{}',
+  is_public BOOLEAN DEFAULT false,
+  
+  -- Paywall
+  has_paywall BOOLEAN DEFAULT false,
+  paywall_price NUMERIC,
+  
+  -- Engagement
+  likes_count INT DEFAULT 0,
+  views_count INT DEFAULT 0,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_stories_author ON stories(author_id);
+CREATE INDEX idx_stories_created ON stories(created_at DESC);
+CREATE INDEX idx_stories_public ON stories(is_public) WHERE is_public = true;
+```
+</CodeGroup>
+
+<Note>
+**RLS Enabled**: Users can only read/modify their own stories. Public stories are readable by all.
+</Note>
+
+### story_metadata
+
+Stores AI-generated cognitive metadata for stories (Phase 1).
+
+<CodeGroup>
+```sql Schema
+CREATE TABLE story_metadata (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id UUID REFERENCES stories(id) ON DELETE CASCADE UNIQUE NOT NULL,
+  
+  -- AI Analysis
+  themes TEXT[] DEFAULT '{}',
+  emotions TEXT[] DEFAULT '{}',
+  entities JSONB DEFAULT '{}',
+  life_domains TEXT[] DEFAULT '{}',
+  
+  -- Scores (0-100)
+  significance_score INT,
+  emotional_depth INT,
+  quality_score INT,
+  
+  word_count INT,
+  is_canonical BOOLEAN DEFAULT false,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_metadata_story ON story_metadata(story_id);
+CREATE INDEX idx_metadata_canonical ON story_metadata(is_canonical) WHERE is_canonical = true;
+```
+</CodeGroup>
+
+<Accordion title="Metadata Fields">
+| Field | Type | Description |
+|-------|------|-------------|
+| `themes` | TEXT[] | AI-extracted themes ("growth", "relationships") |
+| `emotions` | TEXT[] | Detected emotions ("hopeful", "anxious") |
+| `entities` | JSONB | People, places, times mentioned |
+| `life_domains` | TEXT[] | Life areas ("work", "health", "family") |
+| `significance_score` | INT | 0-100 importance rating |
+| `emotional_depth` | INT | 0-100 emotional intensity |
+| `quality_score` | INT | 0-100 writing quality |
+| `is_canonical` | BOOLEAN | User-marked as "important" |
+</Accordion>
+
+### weekly_reflections
+
+Stores AI-generated weekly summaries of journaling patterns (Phase 3).
+
+<CodeGroup>
+```sql supabase/migrations/001_create_weekly_reflections.sql
+CREATE TABLE weekly_reflections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  user_wallet TEXT NOT NULL,
+  
+  reflection_text TEXT NOT NULL,
+  stories_analyzed UUID[] DEFAULT '{}',
+  themes_identified TEXT[] DEFAULT '{}',
+  
+  dominant_tone TEXT,
+  dominant_domain TEXT,
+  
+  week_start TIMESTAMPTZ NOT NULL,
+  week_end TIMESTAMPTZ NOT NULL,
+  canonical_weight FLOAT DEFAULT 0,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_reflections_user ON weekly_reflections(user_id);
+CREATE UNIQUE INDEX idx_reflections_user_week ON weekly_reflections(user_id, week_start);
+```
+</CodeGroup>
+
+<Info>
+**Unique Constraint**: One reflection per user per week (Sunday 00:00 - Saturday 23:59)
+</Info>
+
+### habits & daily_logs
+
+Tracks user habits and daily check-ins for the Daily Tracker feature.
+
+<CodeGroup>
+```sql supabase/migrations/004_create_habits_tables.sql
+CREATE TABLE habits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT DEFAULT 'General',
+  target_frequency TEXT DEFAULT 'daily',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE daily_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  date DATE NOT NULL,
+  completed_habit_ids UUID[] DEFAULT '{}',
+  mood TEXT DEFAULT 'good',
+  sleep_hours NUMERIC,
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, date)
+);
+```
+</CodeGroup>
+
+### verified_metrics
+
+Stores privacy-preserving CRE-attested story metrics (off-chain, linked to on-chain proofs).
+
+<CodeGroup>
+```sql supabase/migrations/006_create_verified_metrics_tables.sql
+CREATE TABLE verified_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id UUID REFERENCES stories(id) ON DELETE CASCADE UNIQUE NOT NULL,
+  author_wallet TEXT NOT NULL,
+  
+  -- Full metrics (author-only, off-chain)
+  significance_score INT,
+  emotional_depth INT,
+  quality_score INT,
+  word_count INT,
+  themes TEXT[] DEFAULT '{}',
+  
+  -- Privacy fields (public)
+  quality_tier INT CHECK (quality_tier BETWEEN 1 AND 5),
+  meets_quality_threshold BOOLEAN,
+  metrics_hash TEXT NOT NULL,
+  
+  -- CRE attestation
+  tx_hash TEXT NOT NULL,
+  attestation_id TEXT NOT NULL,
+  verified_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_verified_metrics_story ON verified_metrics(story_id);
+CREATE INDEX idx_verified_metrics_author ON verified_metrics(author_wallet);
+```
+</CodeGroup>
+
+<Warning>
+**Author-Based Filtering**: API routes must verify authorship before returning full metrics. Public users only see `quality_tier` and `meets_quality_threshold`.
+</Warning>
+
+## Row Level Security (RLS)
+
+### Enabling RLS
+
+<CodeGroup>
+```sql supabase/migrations/002_enable_rls_policies.sql
+ALTER TABLE stories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE story_metadata ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_reflections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
+```
+</CodeGroup>
+
+### RLS Policies
+
+<Accordion title="Stories Policies">
+```sql
+-- Users can read their own stories
+CREATE POLICY "Users can read their own stories"
+  ON stories
+  FOR SELECT
+  USING (auth.uid()::text = author_id::text);
+
+-- Users can read public stories
+CREATE POLICY "Users can read public stories"
+  ON stories
+  FOR SELECT
+  USING (is_public = true);
+
+-- Users can insert their own stories
+CREATE POLICY "Users can insert their own stories"
+  ON stories
+  FOR INSERT
+  WITH CHECK (auth.uid()::text = author_id::text);
+
+-- Users can update their own stories
+CREATE POLICY "Users can update their own stories"
+  ON stories
+  FOR UPDATE
+  USING (auth.uid()::text = author_id::text)
+  WITH CHECK (auth.uid()::text = author_id::text);
+
+-- Users can delete their own stories
+CREATE POLICY "Users can delete their own stories"
+  ON stories
+  FOR DELETE
+  USING (auth.uid()::text = author_id::text);
+```
+</Accordion>
+
+<Accordion title="Story Metadata Policies">
+```sql
+-- Users can read metadata for their own stories
+CREATE POLICY "Users can read their own story metadata"
+  ON story_metadata
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM stories
+      WHERE stories.id = story_metadata.story_id
+        AND stories.author_id::text = auth.uid()::text
+    )
+  );
+
+-- Users can read metadata for public stories
+CREATE POLICY "Users can read public story metadata"
+  ON story_metadata
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM stories
+      WHERE stories.id = story_metadata.story_id
+        AND stories.is_public = true
+    )
+  );
+
+-- Users can update metadata for their own stories
+CREATE POLICY "Users can update their own story metadata"
+  ON story_metadata
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM stories
+      WHERE stories.id = story_metadata.story_id
+        AND stories.author_id::text = auth.uid()::text
+    )
+  );
+```
+</Accordion>
+
+<Accordion title="Weekly Reflections Policies">
+```sql
+-- Users can only read their own reflections
+CREATE POLICY "Users can read their own reflections"
+  ON weekly_reflections
+  FOR SELECT
+  USING (auth.uid()::text = user_id::text);
+
+-- Users can insert their own reflections
+CREATE POLICY "Users can insert their own reflections"
+  ON weekly_reflections
+  FOR INSERT
+  WITH CHECK (auth.uid()::text = user_id::text);
+
+-- Users can delete their own reflections
+CREATE POLICY "Users can delete their own reflections"
+  ON weekly_reflections
+  FOR DELETE
+  USING (auth.uid()::text = user_id::text);
+```
+</Accordion>
+
+<Note>
+**RLS is defense-in-depth**: API routes use admin client (bypasses RLS) but always include explicit authorization checks. RLS protects against direct database access.
+</Note>
+
+## Migrations
+
+### Running Migrations
+
+<CodeGroup>
+```bash Supabase CLI
+# Run all pending migrations
+supabase db push
+
+# Create a new migration
+supabase migration new create_new_table
+
+# Reset database (caution: destroys data)
+supabase db reset
+```
+
+```sql Manual Execution
+-- Connect to Supabase via psql or dashboard SQL editor
+-- Run migration files in order:
+\i 001_create_weekly_reflections.sql
+\i 002_enable_rls_policies.sql
+\i 003_add_oauth_fields.sql
+\i 004_create_habits_tables.sql
+\i 005_create_waitlist_table.sql
+\i 006_create_verified_metrics_tables.sql
+```
+</CodeGroup>
+
+### Migration Files
+
+<Accordion title="Migration Order">
+| File | Description |
+|------|-------------|
+| `001_create_weekly_reflections.sql` | Weekly AI reflection summaries |
+| `002_enable_rls_policies.sql` | Row Level Security policies |
+| `003_add_oauth_fields.sql` | Google OAuth fields to users table |
+| `004_create_habits_tables.sql` | Habit tracking tables |
+| `005_create_waitlist_table.sql` | Waitlist table for marketing |
+| `006_create_verified_metrics_tables.sql` | CRE-attested metrics storage |
+</Accordion>
+
+<Warning>
+**Always run migrations in order!** Migration dependencies may cause failures if run out of sequence.
+</Warning>
+
+## Supabase Client Variants
+
+### Browser Client
+
+<CodeGroup>
+```typescript app/utils/supabase/supabaseClient.ts
+import { createBrowserClient } from "@supabase/ssr";
+
+let client: ReturnType<typeof createBrowserClient> | null = null;
+
+export function createSupabaseBrowserClient() {
+  if (!client) {
+    client = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return client;
+}
+```
+</CodeGroup>
+
+**Use Cases:**
+- Client components
+- React hooks
+- Browser-side queries with RLS protection
+
+### Server Client
+
+<CodeGroup>
+```typescript app/utils/supabase/supabaseServer.ts
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export function createSupabaseServerClient() {
+  const cookieStore = cookies();
+  
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
+}
+```
+</CodeGroup>
+
+**Use Cases:**
+- Server components
+- API routes with user context
+- SSR with cookie-based auth
+
+### Admin Client
+
+<CodeGroup>
+```typescript app/utils/supabase/supabaseAdmin.ts
+import { createClient } from "@supabase/supabase-js";
+
+let adminClient: ReturnType<typeof createClient> | null = null;
+
+export function createSupabaseAdminClient() {
+  if (!adminClient) {
+    adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+  }
+  return adminClient;
+}
+```
+</CodeGroup>
+
+**Use Cases:**
+- Admin operations (bypasses RLS)
+- Bulk operations
+- System-level queries
+
+<Warning>
+**Admin Client Security**: Always add explicit authorization checks before using admin client:
+
+```typescript
+const { data: story } = await adminClient
+  .from("stories")
+  .select("author_id")
+  .eq("id", storyId)
+  .single();
+
+if (story.author_id !== authenticatedUserId) {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+```
+</Warning>
+
+## Database Indexes
+
+### Performance Optimization
+
+<CodeGroup>
+```sql Indexes
+-- Users
+CREATE INDEX idx_users_wallet ON users(wallet_address);
+CREATE INDEX idx_users_google ON users(google_id);
+CREATE INDEX idx_users_email ON users(email);
+
+-- Stories
+CREATE INDEX idx_stories_author ON stories(author_id);
+CREATE INDEX idx_stories_created ON stories(created_at DESC);
+CREATE INDEX idx_stories_public ON stories(is_public) WHERE is_public = true;
+
+-- Story Metadata
+CREATE INDEX idx_metadata_story ON story_metadata(story_id);
+CREATE INDEX idx_metadata_canonical ON story_metadata(is_canonical) 
+  WHERE is_canonical = true;
+
+-- Weekly Reflections
+CREATE INDEX idx_reflections_user ON weekly_reflections(user_id);
+CREATE INDEX idx_reflections_created ON weekly_reflections(created_at DESC);
+
+-- Verified Metrics
+CREATE INDEX idx_verified_metrics_story ON verified_metrics(story_id);
+CREATE INDEX idx_verified_metrics_author ON verified_metrics(author_wallet);
+```
+</CodeGroup>
+
+<Accordion title="Index Usage Patterns">
+| Query Pattern | Index Used |
+|---------------|------------|
+| Find user by wallet | `idx_users_wallet` |
+| Find stories by author | `idx_stories_author` |
+| List public stories (feed) | `idx_stories_public`, `idx_stories_created` |
+| Find canonical stories | `idx_metadata_canonical` |
+| Get weekly reflection | `idx_reflections_user_week` (unique) |
+</Accordion>
+
+## Common Queries
+
+### Fetch User Stories
+
+<CodeGroup>
+```typescript Example
+const { data: stories } = await supabase
+  .from("stories")
+  .select(`
+    *,
+    story_metadata(*)
+  `)
+  .eq("author_id", userId)
+  .order("created_at", { ascending: false })
+  .limit(20);
+```
+</CodeGroup>
+
+### Fetch Public Feed
+
+<CodeGroup>
+```typescript Example
+const { data: publicStories } = await supabase
+  .from("stories")
+  .select(`
+    *,
+    users!inner(username, name, avatar_url)
+  `)
+  .eq("is_public", true)
+  .order("created_at", { ascending: false })
+  .limit(50);
+```
+</CodeGroup>
+
+### Update Story Metadata
+
+<CodeGroup>
+```typescript Example
+const { error } = await supabase
+  .from("story_metadata")
+  .update({ is_canonical: true })
+  .eq("story_id", storyId);
+```
+</CodeGroup>
+
+## Backup & Recovery
+
+<Info>
+**Supabase Automatic Backups**: Daily backups are enabled by default on Supabase Pro plan. Backups are retained for 7 days.
+</Info>
+
+### Manual Backup
+
+<CodeGroup>
+```bash pg_dump
+# Export full database
+pg_dump -h db.your-project.supabase.co \
+  -U postgres \
+  -d postgres \
+  -F c \
+  -f backup.dump
+
+# Restore from backup
+pg_restore -h db.your-project.supabase.co \
+  -U postgres \
+  -d postgres \
+  backup.dump
+```
+</CodeGroup>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Security Architecture" icon="shield" href="/architecture/security">
+    Learn about RLS policies and authentication
+  </Card>
+  <Card title="CRE Integration" icon="link" href="/architecture/cre-integration">
+    Understand on-chain metrics attestation
+  </Card>
+</CardGroup>

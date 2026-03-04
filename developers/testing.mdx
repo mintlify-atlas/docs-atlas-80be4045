@@ -1,0 +1,396 @@
+---
+title: Testing
+description: Comprehensive testing guide for iStory - unit tests, E2E tests, and test automation
+---
+
+iStory uses a multi-layered testing strategy to ensure code quality and reliability across the entire stack.
+
+## Testing Stack
+
+<CardGroup cols={2}>
+  <Card title="Unit Tests" icon="vial">
+    Vitest with React Testing Library for component and API testing
+  </Card>
+  <Card title="E2E Tests" icon="browser">
+    Playwright for cross-browser end-to-end testing
+  </Card>
+  <Card title="Coverage" icon="chart-line">
+    @vitest/coverage-v8 for code coverage reports
+  </Card>
+  <Card title="Mocking" icon="mask">
+    vi.mock for dependency isolation
+  </Card>
+</CardGroup>
+
+## Unit Testing with Vitest
+
+### Running Unit Tests
+
+<CodeGroup>
+```bash All Tests
+npx vitest run
+```
+
+```bash Watch Mode
+npx vitest
+```
+
+```bash With Coverage
+npx vitest run --coverage
+```
+
+```bash Single File
+npx vitest run __tests__/RecordPage.test.tsx
+```
+</CodeGroup>
+
+### Test Configuration
+
+The test environment is configured in `vitest.config.ts`:
+
+```typescript vitest.config.ts
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './__tests__/setup.ts',
+    exclude: ['node_modules', 'cre/**/node_modules/**', 'e2e/**/*', '.next', 'out', 'dist'],
+    alias: {
+      '@': path.resolve(__dirname, './'),
+    },
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: 'https://mock.supabase.co',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'mock-anon-key',
+    },
+  },
+});
+```
+
+<Note>
+The setup file (`__tests__/setup.ts`) automatically mocks wagmi hooks, Next.js navigation, ResizeObserver, Supabase, and Web Crypto API.
+</Note>
+
+### Test Coverage
+
+Current test suite includes **123 passing tests** across 5 test files:
+
+| Test File | Tests | Coverage | Description |
+|-----------|-------|----------|-------------|
+| `api/analyze.test.ts` | 38 | 100% lines | AI analysis endpoint tests |
+| `components/StoryInsights.test.tsx` | 41 | Full | Story insights component |
+| `RecordPage.test.tsx` | - | Partial | Recording page functionality |
+| `vault/crypto.test.ts` | 12 | Full | Vault encryption primitives |
+| `vault/keyManager.test.ts` | 15 | Full | Vault key lifecycle |
+
+## Common Mocking Patterns
+
+### Authentication Mock
+
+All protected API routes require auth mocking:
+
+```typescript
+const { MOCK_USER_ID } = vi.hoisted(() => ({
+  MOCK_USER_ID: "test-user-123",
+}));
+
+vi.mock("@/lib/auth", () => ({
+  validateAuthOrReject: vi.fn().mockResolvedValue(MOCK_USER_ID),
+  isAuthError: vi.fn().mockReturnValue(false),
+}));
+```
+
+### Gemini AI Mock
+
+For tests involving AI analysis:
+
+```typescript
+const { mockGenerateContent, MockGoogleGenerativeAI } = vi.hoisted(() => {
+  const mockGenerateContent = vi.fn();
+  class MockGoogleGenerativeAI {
+    constructor(_apiKey: string) {}
+    getGenerativeModel() {
+      return { generateContent: mockGenerateContent };
+    }
+  }
+  return { mockGenerateContent, MockGoogleGenerativeAI };
+});
+
+vi.mock("@google/generative-ai", () => ({
+  GoogleGenerativeAI: MockGoogleGenerativeAI,
+}));
+```
+
+### Vault / IndexedDB Mock
+
+For components using local encryption:
+
+```typescript
+vi.mock("@/lib/vault", () => ({
+  isVaultSetup: vi.fn().mockResolvedValue(false),
+  isVaultUnlocked: vi.fn().mockReturnValue(false),
+  getDEK: vi.fn(),
+  encryptString: vi.fn(),
+  getVaultDb: vi.fn().mockReturnValue({
+    stories: { put: vi.fn(), get: vi.fn(), delete: vi.fn() },
+    vaultKeys: { get: vi.fn(), put: vi.fn(), clear: vi.fn() },
+  }),
+  clearAllKeys: vi.fn(),
+}));
+```
+
+<Warning>
+Use `fake-indexeddb/auto` polyfill for vault-specific tests. For component tests, mock the entire `@/lib/vault` module to avoid IndexedDB operations.
+</Warning>
+
+### Framer Motion Mock
+
+For component tests with animations:
+
+```typescript
+vi.mock("framer-motion", () => ({
+  motion: {
+    div: ({ children, ...props }: React.PropsWithChildren<object>) => (
+      <div {...props}>{children}</div>
+    ),
+  },
+}));
+```
+
+## E2E Testing with Playwright
+
+### Running E2E Tests
+
+<Steps>
+  <Step title="Run all tests">
+    ```bash
+    npx playwright test
+    ```
+    Automatically starts dev server on port 3001
+  </Step>
+  
+  <Step title="Interactive UI mode">
+    ```bash
+    npx playwright test --ui
+    ```
+    Opens Playwright's interactive test UI
+  </Step>
+  
+  <Step title="Specific browser">
+    ```bash
+    npx playwright test --project=chromium
+    ```
+    Run tests in Chrome only
+  </Step>
+</Steps>
+
+### Playwright Configuration
+
+Configured in `playwright.config.ts`:
+
+```typescript playwright.config.ts
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+  
+  use: {
+    baseURL: 'http://localhost:3001',
+    trace: 'on-first-retry',
+  },
+
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
+
+  webServer: {
+    command: 'npm run dev -- -p 3001', 
+    url: 'http://localhost:3001',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
+  },
+});
+```
+
+### E2E Test Example
+
+From `e2e/navigation.spec.ts`:
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test('Landing page loads and navigation works', async ({ page }) => {
+  await page.goto('/');
+
+  // Wait for hydration
+  await expect(page.getByText('Loading Wallet Connectors...'))
+    .not.toBeVisible({ timeout: 30000 });
+
+  // Check title
+  await expect(page).toHaveTitle(/EStory/i);
+  
+  // Verify hero text
+  await expect(page.getByRole('heading', { name: /Your Life/i }))
+    .toBeVisible({ timeout: 10000 });
+
+  // Click Explore Stories button
+  const exploreBtn = page.getByRole('button', { name: /Explore Stories/i });
+  await expect(exploreBtn).toBeVisible();
+  await exploreBtn.click();
+  
+  // Verify navigation
+  await expect(page).toHaveURL(/.*social/, { timeout: 60000 });
+  await expect(page.getByRole('heading', { name: /Community Stories/i }))
+    .toBeVisible({ timeout: 30000 });
+});
+```
+
+## Writing Tests
+
+### Component Test Example
+
+```typescript RecordPage.test.tsx
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import RecordPage from "../app/record/RecordPageClient";
+
+// Mock getUserMedia for JSDOM
+Object.defineProperty(global.navigator, "mediaDevices", {
+  value: {
+    getUserMedia: vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop: vi.fn() }],
+    }),
+  },
+  writable: true,
+});
+
+describe("RecordPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders the main recording interface", () => {
+    render(<RecordPage />);
+    expect(screen.getByText(/Record Your/)).toBeInTheDocument();
+    expect(screen.getByText("Story")).toBeInTheDocument();
+    expect(screen.getByText("Audio Recording")).toBeInTheDocument();
+  });
+
+  it("handles text input for title and transcription", () => {
+    render(<RecordPage />);
+    
+    const titleInput = screen.getByPlaceholderText("Give your story a title...");
+    const transcriptionArea = screen.getByPlaceholderText(/Your transcribed text/i);
+
+    fireEvent.change(titleInput, { target: { value: "My Day" } });
+    fireEvent.change(transcriptionArea, {
+      target: { value: "This is a test entry." },
+    });
+
+    expect((titleInput as HTMLInputElement).value).toBe("My Day");
+    expect((transcriptionArea as HTMLTextAreaElement).value).toBe(
+      "This is a test entry."
+    );
+  });
+});
+```
+
+<Accordion title="AI Analysis Prompt Template">
+For testing AI analysis endpoints, use this standardized prompt structure:
+
+```typescript
+const ANALYSIS_PROMPT = `Analyze this personal story and extract structured metadata.
+Respond ONLY with valid JSON, no markdown.
+
+Story:
+"""
+{STORY_TEXT}
+"""
+
+Return this exact JSON structure:
+{
+  "themes": ["theme1", "theme2"],
+  "emotional_tone": "string",
+  "life_domain": "string",
+  "intensity_score": 0.0,
+  "significance_score": 0.0,
+  "people_mentioned": ["name1"],
+  "places_mentioned": ["place1"],
+  "time_references": ["reference1"],
+  "brief_insight": "string"
+}`;
+```
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Isolate Tests" icon="shield">
+    Use `beforeEach` to clear mocks and reset state between tests
+  </Card>
+  <Card title="Mock External Deps" icon="plug">
+    Always mock Supabase, AI services, and wallet connections
+  </Card>
+  <Card title="Test User Flows" icon="route">
+    E2E tests should cover complete user journeys, not individual components
+  </Card>
+  <Card title="Increase Timeouts" icon="clock">
+    Use longer timeouts in E2E tests for Next.js compilation and hydration
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ResizeObserver errors">
+    Already mocked in `__tests__/setup.ts`. If you see errors, ensure setup file is imported.
+  </Accordion>
+  
+  <Accordion title="IndexedDB not available">
+    For vault tests, `fake-indexeddb/auto` is imported in setup. For component tests, mock the entire `@/lib/vault` module.
+  </Accordion>
+  
+  <Accordion title="E2E tests timeout">
+    Increase timeout in test file with `test.slow()` or adjust `webServer.timeout` in `playwright.config.ts`.
+  </Accordion>
+  
+  <Accordion title="Web Crypto API errors">
+    Setup file maps `node:crypto.webcrypto` to `globalThis.crypto`. Ensure you're using the polyfilled version.
+  </Accordion>
+</AccordionGroup>
+
+## Continuous Integration
+
+When running tests in CI:
+
+```yaml .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm install
+      - run: npx vitest run
+      - run: npx playwright install --with-deps
+      - run: npx playwright test
+```
+
+<Note>
+Playwright automatically detects CI environment and adjusts settings (retries, workers, etc.).
+</Note>

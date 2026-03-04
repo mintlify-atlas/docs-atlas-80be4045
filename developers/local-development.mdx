@@ -1,0 +1,626 @@
+---
+title: 'Local Development'
+description: 'Development workflows, commands, and testing guide'
+icon: 'code'
+---
+
+## Development Server
+
+Start the Next.js development server on `localhost:3000`:
+
+```bash
+npm run dev
+```
+
+The server will:
+- Hot-reload on file changes
+- Display compilation errors in the browser
+- Show API route logs in the terminal
+- Load environment variables from `.env.local`
+
+<Info>
+  The dev server runs on port 3000 by default. To use a different port: `npm run dev -- -p 3001`
+</Info>
+
+## Available Scripts
+
+### Web Development
+
+<CodeGroup>
+  ```bash Development
+  npm run dev
+  # Start Next.js dev server on localhost:3000
+  ```
+
+  ```bash Production Build
+  npm run build
+  # Create optimized production build
+  # This is what Vercel runs during deployment
+  ```
+
+  ```bash Production Server
+  npm run start
+  # Start production server (requires build first)
+  ```
+
+  ```bash Linting
+  npm run lint
+  # Run ESLint checks
+  ```
+</CodeGroup>
+
+### Mobile Development
+
+<Info>
+  eStory includes an Expo-based mobile app in the `mobile/` directory.
+</Info>
+
+<CodeGroup>
+  ```bash Start Expo
+  npm run mobile
+  # Start Expo dev server
+  ```
+
+  ```bash Android
+  npm run mobile:android
+  # Start Expo for Android
+  ```
+
+  ```bash iOS
+  npm run mobile:ios
+  # Start Expo for iOS
+  ```
+</CodeGroup>
+
+<Warning>
+  The main web app scripts (`dev`, `build`, `start`) must always run Next.js commands, not Expo. Mobile scripts are namespaced under `mobile:*`.
+</Warning>
+
+### Testing Commands
+
+#### Unit Tests (Vitest)
+
+eStory uses Vitest for fast unit testing with React Testing Library.
+
+<CodeGroup>
+  ```bash Run Once
+  npx vitest run
+  # Run all unit tests once (CI mode)
+  ```
+
+  ```bash Watch Mode
+  npx vitest
+  # Run tests in watch mode (re-runs on file changes)
+  ```
+
+  ```bash Single File
+  npx vitest run __tests__/RecordPage.test.tsx
+  # Test a specific file
+  ```
+
+  ```bash Coverage
+  npx vitest run --coverage
+  # Generate code coverage report
+  ```
+</CodeGroup>
+
+<Note>
+  Test files are located in `__tests__/`. The test setup is in `__tests__/setup.ts`.
+</Note>
+
+#### E2E Tests (Playwright)
+
+Playwright runs end-to-end tests across Chrome, Firefox, and Safari.
+
+<CodeGroup>
+  ```bash Run E2E Tests
+  npx playwright test
+  # Runs on port 3001 to avoid conflicts
+  ```
+
+  ```bash Interactive UI
+  npx playwright test --ui
+  # Visual test runner with debugging
+  ```
+
+  ```bash Headed Mode
+  npx playwright test --headed
+  # See the browser during test execution
+  ```
+</CodeGroup>
+
+<Info>
+  E2E tests are in the `e2e/` directory. Configure browsers and settings in `playwright.config.ts`.
+</Info>
+
+### Smart Contract Commands
+
+#### Compilation
+
+```bash
+npx hardhat compile
+```
+
+Compiles Solidity contracts in the `contracts/` directory. Generates:
+- TypeScript types
+- ABI JSON files in `lib/abis/`
+
+#### Deployment
+
+<Steps>
+  <Step title="Deploy to Base Sepolia">
+    ```bash
+    npx hardhat run scripts/deploy.ts --network baseSepolia
+    ```
+
+    This deploys all three core contracts:
+    - `eStoryToken.sol` - ERC20 $STORY token
+    - `StoryProtocol.sol` - Tips & paywall payments
+    - `StoryNFT.sol` - ERC721 story book NFTs
+  </Step>
+
+  <Step title="Verify on Basescan">
+    ```bash
+    npx hardhat run scripts/verify.ts --network baseSepolia
+    ```
+
+    Makes your contract source code publicly viewable on Basescan.
+  </Step>
+
+  <Step title="Verify ABI Matches">
+    ```bash
+    npx hardhat run scripts/verify-deployment.ts --network baseSepolia
+    ```
+
+    Validates that deployed contracts match expected interfaces.
+  </Step>
+</Steps>
+
+<Warning>
+  Contract deployment requires `ADMIN_WALLET_PRIVATE_KEY` and `BASESCAN_API_KEY` in `.env.local`.
+</Warning>
+
+#### Separate Contract Deployments
+
+You can also deploy contracts individually:
+
+<CodeGroup>
+  ```bash VerifiedMetrics (Legacy)
+  npx hardhat run scripts/deployVerifiedMetrics.ts --network baseSepolia
+  # Old CRE metrics contract (full data on-chain)
+  ```
+
+  ```bash PrivateVerifiedMetrics
+  npx hardhat run scripts/deployPrivateVerifiedMetrics.ts --network baseSepolia
+  # Privacy-preserving CRE metrics (minimal on-chain)
+  ```
+</CodeGroup>
+
+### Utility Scripts
+
+<CodeGroup>
+  ```bash Backfill Metadata
+  npx ts-node scripts/backfill-metadata.ts
+  # Backfill AI metadata for existing stories
+  ```
+
+  ```bash Claude Thinking Agent
+  npx ts-node scripts/think.ts "problem description"
+  # Run Claude for complex problem-solving
+  ```
+
+  ```bash CRE Agent
+  npx ts-node scripts/cre-agent.ts
+  # Chainlink CRE workflow management
+  ```
+
+  ```bash Test Live Integration
+  npx ts-node scripts/test-live.ts
+  # Test live API integrations
+  ```
+</CodeGroup>
+
+## Development Workflow
+
+### Typical Development Session
+
+<Steps>
+  <Step title="Start Dev Server">
+    ```bash
+    npm run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000)
+  </Step>
+
+  <Step title="Make Changes">
+    - Edit files in `app/`, `components/`, or `lib/`
+    - Changes hot-reload automatically
+    - Check terminal for build errors
+  </Step>
+
+  <Step title="Test Changes">
+    ```bash
+    npx vitest run
+    ```
+
+    Run tests to ensure nothing broke.
+  </Step>
+
+  <Step title="Verify Build">
+    ```bash
+    npm run build
+    ```
+
+    Ensure production build passes before committing.
+  </Step>
+</Steps>
+
+### Adding a New Feature
+
+<AccordionGroup>
+  <Accordion title="1. Add API Route">
+    Create a new API route in `app/api/[route-name]/`:
+
+    ```typescript app/api/example/route.ts
+    import { NextRequest, NextResponse } from "next/server";
+    import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+
+    export async function POST(req: NextRequest) {
+      // Authenticate user
+      const authResult = await validateAuthOrReject(req);
+      if (isAuthError(authResult)) return authResult;
+      const userId = authResult;
+
+      // Your logic here
+      const { data } = await req.json();
+
+      return NextResponse.json({ success: true, data });
+    }
+    ```
+
+    <Note>
+      All API routes MUST use `validateAuthOrReject` for security.
+    </Note>
+  </Accordion>
+
+  <Accordion title="2. Create Page Component">
+    Pages follow a two-file pattern:
+
+    **Server Component** (`app/[page]/page.tsx`):
+    ```typescript
+    import { Metadata } from "next";
+    import ExamplePageClient from "./ExamplePageClient";
+
+    export const metadata: Metadata = {
+      title: "Example Page",
+      description: "Page description",
+    };
+
+    export default function ExamplePage() {
+      return <ExamplePageClient />;
+    }
+    ```
+
+    **Client Component** (`app/[page]/ExamplePageClient.tsx`):
+    ```typescript
+    "use client";
+
+    import { useState } from "react";
+
+    export default function ExamplePageClient() {
+      const [data, setData] = useState(null);
+
+      return (
+        <div className="container mx-auto">
+          {/* Your UI here */}
+        </div>
+      );
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="3. Add Navigation Link">
+    Update `components/Navigation.tsx`:
+
+    ```typescript
+    const navItems = [
+      { name: "Home", path: "/" },
+      { name: "Example", path: "/example" },
+      // ... other items
+    ];
+    ```
+  </Accordion>
+
+  <Accordion title="4. Write Tests">
+    Create test file in `__tests__/`:
+
+    ```typescript __tests__/ExamplePage.test.tsx
+    import { describe, it, expect } from "vitest";
+    import { render, screen } from "@testing-library/react";
+    import ExamplePageClient from "@/app/example/ExamplePageClient";
+
+    describe("ExamplePage", () => {
+      it("renders correctly", () => {
+        render(<ExamplePageClient />);
+        expect(screen.getByText("Example")).toBeInTheDocument();
+      });
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Architecture Patterns
+
+### Authentication Flow
+
+All protected API routes use the same pattern:
+
+```typescript
+import { validateAuthOrReject, isAuthError } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  const authResult = await validateAuthOrReject(req);
+  if (isAuthError(authResult)) return authResult;
+  const userId = authResult;
+
+  // Verify user owns the resource
+  const resource = await getResource(resourceId);
+  if (resource.user_id !== userId) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 403 }
+    );
+  }
+
+  // Proceed with operation
+}
+```
+
+### Supabase Client Usage
+
+eStory uses three Supabase client variants:
+
+<Tabs>
+  <Tab title="Browser/Client">
+    ```typescript
+    import { createSupabaseBrowserClient } from "@/app/utils/supabase/supabaseClient";
+
+    const supabase = createSupabaseBrowserClient();
+    const { data } = await supabase.from("stories").select("*");
+    ```
+
+    Use in client components and browser hooks.
+  </Tab>
+
+  <Tab title="Server/API Routes">
+    ```typescript
+    import { createSupabaseServerClient } from "@/app/utils/supabase/supabaseServer";
+
+    const supabase = createSupabaseServerClient();
+    const { data } = await supabase.from("stories").select("*");
+    ```
+
+    Use in API routes and server components.
+  </Tab>
+
+  <Tab title="Admin">
+    ```typescript
+    import { createSupabaseAdminClient } from "@/app/utils/supabase/supabaseAdmin";
+
+    const supabase = createSupabaseAdminClient();
+    const { data } = await supabase.from("stories").select("*");
+    ```
+
+    Bypasses Row Level Security. Use with caution.
+  </Tab>
+</Tabs>
+
+### Web3 Hooks
+
+eStory provides custom hooks for contract interactions:
+
+```typescript
+import { useEStoryToken } from "@/app/hooks/useEStoryToken";
+import { useStoryProtocol } from "@/app/hooks/useStoryProtocol";
+import { useStoryNFT } from "@/app/hooks/useStoryNFT";
+
+function Component() {
+  const { balance, approve } = useEStoryToken();
+  const { tipCreator, payPaywall } = useStoryProtocol();
+  const { mintBook } = useStoryNFT();
+
+  // Use hooks
+}
+```
+
+## Debugging
+
+### Browser DevTools
+
+<Steps>
+  <Step title="Check Console">
+    Look for errors in the browser console (F12)
+  </Step>
+
+  <Step title="Network Tab">
+    Monitor API requests and responses
+  </Step>
+
+  <Step title="React DevTools">
+    Install React DevTools extension to inspect component state
+  </Step>
+</Steps>
+
+### Server Logs
+
+API route logs appear in the terminal running `npm run dev`:
+
+```bash
+[API] POST /api/journal/save
+[API] Response: 200 OK
+```
+
+### Database Debugging
+
+Query Supabase directly through the dashboard:
+
+1. Go to **Table Editor** to view data
+2. Use **SQL Editor** for custom queries
+3. Check **Database > Roles** for RLS policies
+
+## Performance Optimization
+
+### Bundle Analysis
+
+Check bundle sizes after build:
+
+```bash
+npm run build
+```
+
+Output shows per-route sizes:
+
+```
+┌ ○ /                    426 kB         104 kB
+├ ○ /record              467 kB         104 kB
+├ ○ /library             462 kB         104 kB
+└ ○ /profile             498 kB         104 kB
+```
+
+<Warning>
+  Keep pages under **500 kB** First Load JS. The shared bundle (Web3 stack) is ~104 kB.
+</Warning>
+
+### Bundle Budget
+
+Current first load targets:
+
+- **Shared (all pages)**: 104 kB (wagmi + viem + RainbowKit)
+- **Landing**: 426 kB
+- **Record**: 467 kB
+- **Library**: 462 kB
+- **Profile**: 498 kB
+- **Social**: 462 kB
+
+### Optimization Techniques
+
+<CardGroup cols={2}>
+  <Card title="Dynamic Imports" icon="download">
+    ```typescript
+    const Heavy = dynamic(() => import("./Heavy"), {
+      ssr: false,
+    });
+    ```
+  </Card>
+  <Card title="Optimize Packages" icon="box">
+    Configured in `next.config.mjs`:
+    - lucide-react
+    - framer-motion
+    - @radix-ui/*
+  </Card>
+  <Card title="Image Optimization" icon="image">
+    Use Next.js `<Image>` component:
+    ```typescript
+    <Image
+      src="/hero.jpg"
+      width={800}
+      height={600}
+      alt="Hero"
+    />
+    ```
+  </Card>
+  <Card title="Code Splitting" icon="scissors">
+    App Router automatically splits by route
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Build fails with 'Module not found'">
+    - Check import paths use `@/` alias correctly
+    - Verify the file exists at the specified path
+    - Run `npm install` to ensure dependencies are installed
+  </Accordion>
+
+  <Accordion title="Supabase returns empty results">
+    - Check Row Level Security (RLS) policies
+    - Verify you're using the correct Supabase client variant
+    - Ensure user is authenticated if required
+  </Accordion>
+
+  <Accordion title="Wallet connection fails">
+    - Verify `NEXT_PUBLIC_PROJECT_ID` is set
+    - Check MetaMask is installed and unlocked
+    - Ensure you're on the correct network (Base Sepolia)
+  </Accordion>
+
+  <Accordion title="API route returns 401 Unauthorized">
+    - Check `Authorization: Bearer <token>` header is present
+    - Verify Supabase session is valid
+    - Ensure route uses `validateAuthOrReject`
+  </Accordion>
+
+  <Accordion title="Tests fail with 'window is not defined'">
+    - Wrap client-only code with `typeof window !== 'undefined'`
+    - Mock browser APIs in test setup (`__tests__/setup.ts`)
+    - Use dynamic imports with `ssr: false` for client-only components
+  </Accordion>
+</AccordionGroup>
+
+## Pre-Push Checklist
+
+Before pushing code, always run:
+
+<Steps>
+  <Step title="Check for merge conflicts">
+    ```bash
+    grep -r "^<<<<<<< " --include="*.ts" --include="*.tsx" --include="*.mjs" .
+    ```
+
+    Should return no results.
+  </Step>
+
+  <Step title="Verify package.json scripts">
+    ```bash
+    node -e "const p=require('./package.json'); console.log(p.scripts.build, p.scripts.dev)"
+    ```
+
+    Should output:
+    ```
+    next build next dev -p 3000
+    ```
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    npx vitest run
+    ```
+  </Step>
+
+  <Step title="Production build">
+    ```bash
+    npm run build
+    ```
+
+    Must pass without errors.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" href="/api/overview" icon="book">
+    Explore all available API endpoints
+  </Card>
+  <Card title="Database Schema" href="/architecture/database" icon="database">
+    Learn about data models and relationships
+  </Card>
+  <Card title="Smart Contracts" href="/contracts/overview" icon="file-contract">
+    Understand the blockchain layer
+  </Card>
+  <Card title="Testing Guide" href="/developers/testing" icon="flask">
+    Write and run tests effectively
+  </Card>
+</CardGroup>

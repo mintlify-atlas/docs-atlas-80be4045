@@ -1,0 +1,328 @@
+---
+title: 'Engagement'
+description: 'Interact with creators through likes, follows, shares, and tips'
+icon: 'heart'
+---
+
+## Overview
+
+Engage with the iStory community through social actions that reward creators and build connections. All interactions are on-chain or blockchain-verified, ensuring transparency and authenticity.
+
+<Note>
+  You must connect your wallet to perform any engagement action.
+</Note>
+
+## Like Stories
+
+Show appreciation for stories that resonate with you.
+
+<Steps>
+  <Step title="Click the Heart Icon">
+    Tap the heart button on any story card in the feed or detail view.
+  </Step>
+  <Step title="Optimistic UI Update">
+    The like count increments immediately — no waiting for blockchain confirmation.
+  </Step>
+  <Step title="Backend Sync">
+    Your like is recorded in the database and the author receives a notification.
+  </Step>
+</Steps>
+
+### How It Works
+
+```typescript
+// Source: app/api/social/like/route.ts:23-30
+const { data: existingLike } = await admin
+  .from("likes")
+  .select("id")
+  .eq("user_id", authenticatedUserId)
+  .eq("story_id", storyId)
+  .maybeSingle();
+```
+
+Likes are **atomic toggle operations**:
+
+- First click: Insert like record, increment story `likes` count
+- Second click: Delete like record, decrement count (floor at 0)
+
+<Info>
+  The author receives a notification: "[Your name] liked your story" (source: `app/api/social/like/route.ts:106-112`)
+</Info>
+
+### Frontend Implementation
+
+```typescript
+// Source: app/social/SocialPageClient.tsx:285-329
+const handleLike = async (storyNumericId: string) => {
+  // Optimistic update
+  setStories((prev) =>
+    prev.map((s, i) =>
+      i === storyIndex
+        ? {
+            ...s,
+            isLiked: !isCurrentlyLiked,
+            likes: isCurrentlyLiked ? s.likes - 1 : s.likes + 1,
+          }
+        : s
+    )
+  );
+  // ... API call + error rollback
+};
+```
+
+<Tip>
+  Likes are free and instant — no gas fees, no transaction signing.
+</Tip>
+
+## Follow Creators
+
+Build your personalized feed by following writers you love.
+
+<Steps>
+  <Step title="Connect Your Wallet">
+    Ensure your wallet is connected to verify ownership.
+  </Step>
+  <Step title="Click Follow Button">
+    Tap "Follow" on any author card or story header.
+  </Step>
+  <Step title="Optimistic Update">
+    Button changes to "Following" and follower count increments.
+  </Step>
+  <Step title="Server Confirmation">
+    API verifies wallet ownership and updates the database.
+  </Step>
+</Steps>
+
+### Follow API
+
+```typescript
+// Source: app/api/social/follow/route.ts:99-103
+const ownsWallet = await validateWalletOwnership(
+  authenticatedUserId,
+  followerWallet
+);
+if (!ownsWallet) {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
+```
+
+**Security:** The API validates that the authenticated user owns the follower wallet address before allowing follow/unfollow actions.
+
+### Follower Count Updates
+
+```typescript
+// Source: app/api/social/follow/route.ts:158-165
+const { data: userData } = await admin
+  .from("users")
+  .select("followers_count")
+  .eq("wallet_address", followedWallet)
+  .single();
+
+await admin
+  .from("users")
+  .update({ followers_count: (userData?.followers_count || 0) + 1 })
+  .eq("wallet_address", followedWallet);
+```
+
+<Info>
+  The followed creator receives a notification: "[Your name] started following you" (source: `app/api/social/follow/route.ts:180-186`)
+</Info>
+
+### Following Tab
+
+Access your personalized feed:
+
+1. Navigate to `/social`
+2. Click the **"Following"** tab
+3. View stories only from creators you follow
+
+<Tip>
+  You cannot follow yourself — the system prevents this automatically.
+</Tip>
+
+## Share Stories
+
+Amplify great stories to your network.
+
+### Native Sharing
+
+```typescript
+// Source: app/social/SocialPageClient.tsx:397-405
+const handleShare = (id: string) => {
+  const url = `${window.location.origin}/story/${id}`;
+  if (navigator.share) {
+    navigator.share({ title: "Check out this story!", url });
+  } else {
+    navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
+  }
+};
+```
+
+<Steps>
+  <Step title="Click Share Button">
+    Tap the share icon (arrow-up) on any story card.
+  </Step>
+  <Step title="Choose Platform (Mobile)">
+    On mobile devices, the native share sheet appears with options for Twitter, WhatsApp, etc.
+  </Step>
+  <Step title="Copy Link (Desktop)">
+    On desktop, the story URL is copied to your clipboard automatically.
+  </Step>
+</Steps>
+
+<Note>
+  Shared links point to `/story/[id]` with rich OpenGraph metadata for previews.
+</Note>
+
+## Tip Creators
+
+Reward creators with $STORY tokens for exceptional content.
+
+### Tipping Flow
+
+<Steps>
+  <Step title="Adjust Tip Amount">
+    Use the slider (1-50 $STORY) next to the "Tip" button.
+  </Step>
+  <Step title="Approve Tokens">
+    First-time tippers must approve the StoryProtocol contract to spend tokens:
+    ```typescript
+    // Source: app/hooks/useIStoryToken.ts:31-44
+    const approveProtocol = async (amount: string) => {
+      writeContract({
+        address: STORY_TOKEN_ADDRESS,
+        abi: STORY_TOKEN_ABI,
+        functionName: "approve",
+        args: [STORY_PROTOCOL_ADDRESS, parseEther(amount)],
+      });
+    };
+    ```
+  </Step>
+  <Step title="Send Tip">
+    Click "Tip [amount]" to execute the on-chain transaction:
+    ```typescript
+    // Source: contracts/StoryProtocol.sol:30-38
+    function tipCreator(address creator, uint256 amount, uint256 storyId) 
+      external nonReentrant whenNotPaused {
+      require(amount > 0, "Amount must be > 0");
+      storyToken.safeTransferFrom(msg.sender, creator, amount);
+      emit TipSent(msg.sender, creator, amount, storyId);
+    }
+    ```
+  </Step>
+  <Step title="Confirm in Wallet">
+    Sign the transaction in MetaMask or your connected wallet.
+  </Step>
+  <Step title="Success">
+    Tokens are transferred directly to the creator's wallet.
+  </Step>
+</Steps>
+
+### Smart Contract Events
+
+The `TipSent` event is emitted for indexing:
+
+```solidity
+// Source: contracts/StoryProtocol.sol:17
+event TipSent(
+  address indexed from, 
+  address indexed to, 
+  uint256 amount, 
+  uint256 indexed storyId
+);
+```
+
+Backend services can listen to this event to:
+- Update creator earnings dashboards
+- Send notifications
+- Track engagement metrics
+
+<Tip>
+  Tips are **direct creator payments** — no platform fees, no intermediaries. 100% goes to the author.
+</Tip>
+
+### Allowance Check
+
+Before tipping, the frontend verifies sufficient allowance:
+
+```typescript
+// Source: app/hooks/useStoryProtocol.ts:24-32
+const tipCreator = async (creatorAddress: string, amount: number, storyId: string) => {
+  const amountWei = parseEther(amount.toString());
+  if (!allowance || allowance < amountWei) {
+    toast.error("Please approve tokens first (via Token Hook)");
+    return;
+  }
+  // ... execute tip
+};
+```
+
+## Interaction Stats
+
+Track your engagement impact:
+
+- **Likes Given**: Visible in your profile under "Activity"
+- **Following Count**: Displayed on your profile header
+- **Tips Sent**: Tracked in wallet transaction history
+- **Shares**: Increments the story's `shares` count
+
+## Technical Implementation
+
+### Optimistic UI Pattern
+
+All engagement actions use optimistic updates:
+
+1. **Immediate UI change** (like count +1, button state change)
+2. **API call** to persist change
+3. **Success**: Keep optimistic state
+4. **Failure**: Rollback UI to original state
+
+```typescript
+// Source: app/social/SocialPageClient.tsx:331-395
+const handleFollow = async (authorWallet: string) => {
+  // Optimistic toggle
+  setStories((prev) =>
+    prev.map((s) =>
+      s.author_wallet?.wallet_address?.toLowerCase() === authorWallet.toLowerCase()
+        ? { ...s, author_wallet: { ...s.author_wallet, isFollowing: !s.author_wallet.isFollowing } }
+        : s
+    )
+  );
+
+  try {
+    const res = await fetch("/api/social/follow", { method: "POST", ... });
+    const { isFollowing, followers_count } = await res.json();
+    // Update with server state
+  } catch (error) {
+    // Revert optimistic update
+    setStories((prev) => /* rollback */);
+  }
+};
+```
+
+### Rate Limiting
+
+Engagement APIs are protected:
+
+```typescript
+// Source: middleware.ts (Auth endpoints: 20 req/min)
+if (pathname.startsWith('/api/social')) {
+  // Rate limit: 20 requests per minute
+}
+```
+
+<Warning>
+  Excessive API calls will result in 429 Too Many Requests responses.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Earning $STORY" icon="coins" href="/monetization/earning">
+    Learn how to monetize your stories and earn from tips
+  </Card>
+  <Card title="NFT Minting" icon="image" href="/monetization/nft-minting">
+    Turn your story collections into tradable NFTs
+  </Card>
+</CardGroup>

@@ -1,0 +1,237 @@
+---
+title: 'Authentication'
+description: 'Connect with Web3 wallet or Google to access your story vault'
+icon: 'shield-check'
+---
+
+## Overview
+
+iStory offers flexible authentication with **dual login methods**: connect via Web3 wallet (MetaMask, Coinbase Wallet, etc.) or sign in with Google OAuth. You can also link both accounts for seamless access.
+
+<Note>
+  **No passwords required.** Wallet users sign a cryptographic message, while Google users authenticate via OAuth 2.0.
+</Note>
+
+## Authentication Methods
+
+<Steps>
+  <Step title="Web3 Wallet Connection">
+    Connect your Ethereum wallet to sign in without creating an account.
+    
+    **Supported Wallets:**
+    - MetaMask
+    - Coinbase Wallet
+    - WalletConnect-compatible wallets
+    - Rainbow Wallet
+    
+    **Flow:**
+    1. Click **Connect Wallet** button in navigation
+    2. Select your wallet provider from RainbowKit modal
+    3. Approve connection in wallet popup
+    4. Sign authentication message (no gas fee)
+    5. You're logged in! Session persists via JWT token
+    
+    <Info>
+      The signature message includes a **one-time nonce** that expires in 5 minutes, preventing replay attacks.
+    </Info>
+  </Step>
+
+  <Step title="Google Sign-In">
+    Use your existing Google account for quick access.
+    
+    **Flow:**
+    1. Click **Sign in with Google**
+    2. Choose your Google account
+    3. Grant permissions (name, email, avatar)
+    4. Redirected to your iStory dashboard
+    
+    <Warning>
+      Google-only accounts cannot mint NFTs or compile books until a wallet is linked.
+    </Warning>
+  </Step>
+
+  <Step title="Link Both Accounts (Recommended)">
+    Combine the convenience of Google login with Web3 wallet capabilities.
+    
+    **To link accounts:**
+    1. Sign in with your primary method (wallet or Google)
+    2. Navigate to **Profile → Settings → Linked Accounts**
+    3. Click **Link Google** or **Link Wallet**
+    4. Complete the signature verification
+    5. Both methods are now linked to one unified profile
+    
+    <Tip>
+      Linked accounts share the same story library, settings, and achievements.
+    </Tip>
+  </Step>
+</Steps>
+
+## Authentication Flow Details
+
+### Wallet Authentication (components/AuthProvider.tsx:479-617)
+
+<Accordion title="How Wallet Login Works">
+  **Client-Side Flow:**
+  
+  1. **Connection Detection** (`useEffect` monitors `isConnected` and `address`)
+  2. **Session Check**: Looks for stored JWT token in `localStorage` (`estory_wallet_token`)
+  3. **Nonce Request**: If no token, fetches unique nonce from `/api/auth/nonce?address=0x...`
+  4. **Signature**: User signs message via `signMessageAsync` (no transaction)
+  5. **Verification**: Sends signature to `/api/auth/login` for server-side verification
+  6. **Token Storage**: Receives JWT, stores in `localStorage`, loads profile
+  
+  **Security Measures:**
+  - Nonce is UUID v4, stored server-side for 5 minutes
+  - Signature verified with `viem.verifyMessage`
+  - Nonce can only be used once (prevents replay attacks)
+  - JWT expires after 30 days, auto-refreshes on activity
+</Accordion>
+
+### Google OAuth Flow (components/AuthProvider.tsx:122-283)
+
+<Accordion title="How Google Sign-In Works">
+  **Server-Side OAuth Flow:**
+  
+  1. **Initiation**: `supabase.auth.signInWithOAuth({ provider: 'google' })`
+  2. **Redirect**: User authorizes on Google OAuth consent screen
+  3. **Callback**: `/api/auth/callback` receives authorization code
+  4. **Token Exchange**: Supabase exchanges code for access token
+  5. **Profile Creation**: AuthProvider detects session, creates/updates user record
+  6. **Auto-Linking**: If email matches existing wallet account, auto-links
+  
+  **Priority Matching Logic:**
+  1. Check by Supabase auth user ID (returning users)
+  2. Check by `google_id` (account was merged, ID differs)
+  3. Check by email (same email = same person, auto-link)
+  4. Create new Google-only user profile
+</Accordion>
+
+### Secure Account Linking (app/api/auth/link-google/route.ts)
+
+<Accordion title="Account Linking Security">
+  **Why linking requires signature:**
+  
+  Linking a Google account to a wallet (or vice versa) requires **proof of ownership** via wallet signature. This prevents malicious actors from linking your Google account to their wallet.
+  
+  **Secure Flow:**
+  1. User clicks **Link Google** in Profile settings
+  2. User signs message: `"Link Google account to eStory wallet {address}\n\nTimestamp: {now}"`
+  3. Server generates secure `linkingToken` (UUID), stores in session
+  4. User completes Google OAuth flow
+  5. Server verifies token + signature before linking accounts
+  6. Token is single-use and expires after OAuth redirect
+  
+  **Session Storage:**
+  - `googleLinkingToken`: Secure UUID token
+  - `googleLinkingUserId`: Current user ID
+  - Both cleared after linking completes or fails
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wallet signature keeps failing">
+    **Possible causes:**
+    - You clicked "Reject" in MetaMask
+    - Nonce expired (5-minute window)
+    - Wallet is connected to wrong network
+    
+    **Solution:**
+    1. Refresh the page
+    2. Disconnect and reconnect wallet
+    3. Switch to Base Sepolia testnet (chain ID: 84532)
+    4. Try signing again within 5 minutes
+  </Accordion>
+
+  <Accordion title="Google sign-in redirects to error page">
+    **Common issues:**
+    - Third-party cookies blocked in browser
+    - Ad blocker interfering with OAuth popup
+    - Redirect URL not whitelisted
+    
+    **Solution:**
+    1. Enable third-party cookies for `supabase.co` domain
+    2. Disable ad blockers temporarily
+    3. Try in incognito/private browsing mode
+    4. Clear browser cache and retry
+  </Accordion>
+
+  <Accordion title="Can't link accounts - 'Already linked' error">
+    **Why this happens:**
+    - Email is already associated with another account
+    - Wallet address is linked to a different profile
+    
+    **Solution:**
+    1. Sign out completely
+    2. Sign in with the method you want to keep as primary
+    3. If you have multiple accounts, contact support to merge them
+    4. Avoid creating duplicate accounts with same email
+  </Accordion>
+
+  <Accordion title="Lost access to wallet - can I recover my account?">
+    **If you linked Google:**
+    ✅ Yes! Sign in with Google, your stories are safe.
+    
+    **If wallet-only:**
+    ❌ No recovery possible. Wallet private key = your only access.
+    
+    **Prevention:**
+    - Always link a Google account as backup
+    - Store wallet seed phrase securely (never share it)
+    - Consider hardware wallet for high-value accounts
+  </Accordion>
+</AccordionGroup>
+
+## Session Management
+
+### Token Storage
+
+| Method | Storage Location | Expiry | Auto-Refresh |
+|--------|-----------------|--------|-------------|
+| **Wallet JWT** | `localStorage.estory_wallet_token` | 30 days | No (re-sign required) |
+| **Google Session** | Supabase session cookie | 1 hour | Yes (rolling refresh) |
+
+### Logout Behavior
+
+<Info>
+  Signing out clears **all authentication tokens** and **wipes vault encryption keys** from memory.
+</Info>
+
+**What happens on logout:**
+1. Supabase session cleared (Google users)
+2. `estory_wallet_token` removed from `localStorage`
+3. Vault DEKs cleared via `clearAllKeys()` (lib/vault)
+4. User redirected to landing page
+5. IndexedDB vault data remains encrypted (requires PIN to unlock)
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Both Methods" icon="link">
+    Link wallet + Google for maximum flexibility. Sign in with Google for convenience, use wallet for NFT minting.
+  </Card>
+  
+  <Card title="Secure Your Wallet" icon="lock">
+    Never share your seed phrase. Use hardware wallet (Ledger, Trezor) for accounts holding NFTs or tokens.
+  </Card>
+  
+  <Card title="Enable 2FA on Google" icon="shield">
+    Add two-factor authentication to your Google account for extra security layer.
+  </Card>
+  
+  <Card title="Test Signatures First" icon="check-circle">
+    Practice signing messages on testnet before using mainnet wallet with real funds.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Record Your First Story" icon="microphone" href="/user-guide/recording-stories">
+    Start capturing memories with voice recording and AI transcription.
+  </Card>
+  
+  <Card title="Set Up Local Vault" icon="vault" href="/features/local-vault">
+    Enable client-side encryption for maximum privacy.
+  </Card>
+</CardGroup>

@@ -1,0 +1,225 @@
+---
+title: 'Smart Contracts Overview'
+description: 'Complete guide to iStory smart contracts deployed on Base Sepolia'
+icon: 'file-contract'
+---
+
+## Architecture
+
+iStory uses four core smart contracts deployed on Base Sepolia (Chain ID: 84532) to power Web3 features:
+
+<CardGroup cols={2}>
+  <Card title="eStoryToken" icon="coins" href="/contracts/istory-token">
+    ERC20 utility token with 100M max supply
+  </Card>
+  <Card title="StoryProtocol" icon="handshake" href="/contracts/story-protocol">
+    Tipping and paywall payments
+  </Card>
+  <Card title="StoryNFT" icon="image" href="/contracts/story-nft">
+    ERC721 story collections with royalties
+  </Card>
+  <Card title="PrivateVerifiedMetrics" icon="shield-check" href="/contracts/verified-metrics">
+    Chainlink CRE-attested quality metrics
+  </Card>
+</CardGroup>
+
+## Deployed Addresses
+
+All contracts are deployed on **Base Sepolia** (Chain ID: 84532).
+
+<CodeGroup>
+```typescript Contract Addresses
+import {
+  STORY_TOKEN_ADDRESS,
+  STORY_PROTOCOL_ADDRESS,
+  STORY_NFT_ADDRESS,
+  VERIFIED_METRICS_ADDRESS
+} from '@/lib/contracts';
+
+// eStoryToken (ERC20)
+const TOKEN = "0xf9eDD76B55F58Bf4E8Ae2A90a1D6d8d44dfA74BC";
+
+// StoryProtocol (Tips & Paywalls)
+const PROTOCOL = "0xA51a4cA00cC4C81A5F7cB916D0BFa1a4aD6f4a71";
+
+// StoryNFT (ERC721)
+const NFT = "0x6D37ebc5eAEF37ecC888689f295D114187933342";
+
+// PrivateVerifiedMetrics (CRE)
+const METRICS = "0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c";
+```
+
+```solidity Environment Variables
+NEXT_PUBLIC_STORY_TOKEN_ADDRESS=0xf9eDD76B55F58Bf4E8Ae2A90a1D6d8d44dfA74BC
+NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0xA51a4cA00cC4C81A5F7cB916D0BFa1a4aD6f4a71
+NEXT_PUBLIC_STORY_NFT_ADDRESS=0x6D37ebc5eAEF37ecC888689f295D114187933342
+NEXT_PUBLIC_VERIFIED_METRICS_ADDRESS=0x158e08BCD918070C1703E8b84a6E2524D2AE5e4c
+```
+</CodeGroup>
+
+## Contract Interactions
+
+### Using Wagmi Hooks
+
+iStory provides React hooks for all contract operations:
+
+```typescript app/hooks/useEStoryToken.ts
+import { useEStoryToken } from '@/app/hooks/useEStoryToken';
+
+function MyComponent() {
+  const { balance, approve, isLoading } = useEStoryToken();
+  
+  // Approve StoryProtocol to spend tokens
+  await approve(STORY_PROTOCOL_ADDRESS, parseEther("10"));
+}
+```
+
+### Direct Contract Calls
+
+```typescript Using Viem
+import { publicClient } from '@/lib/wagmi';
+import { STORY_TOKEN_ABI, STORY_TOKEN_ADDRESS } from '@/lib/contracts';
+
+const balance = await publicClient.readContract({
+  address: STORY_TOKEN_ADDRESS,
+  abi: STORY_TOKEN_ABI,
+  functionName: 'balanceOf',
+  args: [userAddress]
+});
+```
+
+## Security Features
+
+<AccordionGroup>
+  <Accordion title="Access Control">
+    All contracts use OpenZeppelin's `AccessControl` for role-based permissions:
+    
+    - **MINTER_ROLE**: Can mint new tokens (eStoryToken)
+    - **PAUSER_ROLE**: Can pause/unpause transfers (eStoryToken, StoryProtocol)
+    - **DEFAULT_ADMIN_ROLE**: Can manage roles and update settings
+  </Accordion>
+  
+  <Accordion title="Reentrancy Protection">
+    StoryProtocol uses OpenZeppelin's `ReentrancyGuard` on all payment functions:
+    
+    - `nonReentrant` modifier prevents reentrancy attacks
+    - `SafeERC20` prevents silent transfer failures
+  </Accordion>
+  
+  <Accordion title="Pausable">
+    Critical contracts can be paused in emergencies:
+    
+    - eStoryToken: Blocks all transfers when paused
+    - StoryProtocol: Blocks tips and paywall payments
+  </Accordion>
+  
+  <Accordion title="Supply Cap">
+    eStoryToken enforces a hard cap:
+    
+    ```solidity
+    uint256 public constant MAX_SUPPLY = 100_000_000 * 10 ** 18; // 100M tokens
+    ```
+    
+    Minting reverts if it would exceed this limit.
+  </Accordion>
+</AccordionGroup>
+
+## Network Configuration
+
+<Note>
+All contracts are deployed on **Base Sepolia** testnet. Ensure your wallet is connected to the correct network:
+
+- **Chain ID**: 84532
+- **RPC URL**: https://sepolia.base.org
+- **Block Explorer**: https://sepolia.basescan.org
+</Note>
+
+### Add Base Sepolia to Wagmi
+
+```typescript lib/wagmi.ts
+import { baseSepolia } from 'wagmi/chains';
+
+export const config = createConfig({
+  chains: [baseSepolia],
+  transports: {
+    [baseSepolia.id]: http()
+  }
+});
+```
+
+## Testing Contracts
+
+### Hardhat Commands
+
+```bash Terminal
+# Compile contracts
+npx hardhat compile
+
+# Deploy to Base Sepolia
+npx hardhat run scripts/deploy.ts --network baseSepolia
+
+# Verify deployment
+npx hardhat run scripts/verify-deployment.ts --network baseSepolia
+
+# Run tests
+npx hardhat test
+```
+
+### Local Development
+
+```bash Terminal
+# Start local Hardhat node
+npx hardhat node
+
+# Deploy to localhost (separate terminal)
+npx hardhat run scripts/deploy.ts --network localhost
+```
+
+## Gas Optimization
+
+All contracts follow gas-efficient patterns:
+
+- **Immutable variables**: `storyToken` in StoryProtocol saves 2100 gas per read
+- **Minimal storage**: PrivateVerifiedMetrics stores only hashes on-chain
+- **Efficient packing**: Structs use appropriate uint sizes (uint8, uint96)
+- **Safe arithmetic**: Solidity 0.8.20+ has built-in overflow checks
+
+## Events for Indexing
+
+All contracts emit events for off-chain indexing:
+
+```solidity Key Events
+// eStoryToken
+event Transfer(address indexed from, address indexed to, uint256 value);
+
+// StoryProtocol
+event TipSent(address indexed from, address indexed to, uint256 amount, uint256 indexed storyId);
+event ContentUnlocked(address indexed payer, address indexed author, uint256 amount, uint256 indexed contentId);
+
+// StoryNFT
+event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType);
+
+// PrivateVerifiedMetrics
+event MetricsVerified(bytes32 indexed storyId, bytes32 indexed authorCommitment, uint8 qualityTier, bool meetsQualityThreshold);
+```
+
+<Warning>
+**Backend Integration Required**: The iStory backend listens for these events to update Supabase with transaction history, unlocked content, and verified metrics.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="eStoryToken" icon="coins" href="/contracts/istory-token">
+    Learn about the $STORY utility token
+  </Card>
+  <Card title="StoryProtocol" icon="handshake" href="/contracts/story-protocol">
+    Implement tipping and paywalls
+  </Card>
+  <Card title="StoryNFT" icon="image" href="/contracts/story-nft">
+    Mint story collection NFTs
+  </Card>
+  <Card title="PrivateVerifiedMetrics" icon="shield-check" href="/contracts/verified-metrics">
+    Use Chainlink CRE for verified metrics
+  </Card>
+</CardGroup>

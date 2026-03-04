@@ -1,0 +1,205 @@
+---
+title: 'Setup'
+description: 'Get eStory up and running on your local machine'
+icon: 'download'
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed and configured:
+
+<CardGroup cols={2}>
+  <Card title="Node.js 18+" icon="node-js">
+    Download from [nodejs.org](https://nodejs.org/)
+  </Card>
+  <Card title="Package Manager" icon="box">
+    npm, yarn, or pnpm
+  </Card>
+  <Card title="Supabase Account" icon="database">
+    Sign up at [supabase.com](https://supabase.com)
+  </Card>
+  <Card title="Web3 Wallet" icon="wallet">
+    MetaMask or compatible wallet
+  </Card>
+</CardGroup>
+
+<Info>
+  You'll also need access to **Base Sepolia testnet** for contract deployments and testing.
+</Info>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone <repository-url>
+    cd i_story_dapp
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+
+    <Note>
+      This will install all frontend dependencies, including Next.js 15.5.9, React 19, Web3 libraries (Wagmi 2.17, Viem 2.38, RainbowKit 2.2), and AI service SDKs.
+    </Note>
+  </Step>
+
+  <Step title="Set Up Environment Variables">
+    Create a `.env.local` file in the root directory by copying from the example:
+
+    ```bash
+    cp .env.example .env.local
+    ```
+
+    <Warning>
+      Never commit `.env.local` to version control! It contains sensitive API keys and secrets.
+    </Warning>
+
+    You'll configure the specific variables in the next section.
+  </Step>
+
+  <Step title="Configure Supabase">
+    ### Create a Supabase Project
+
+    1. Go to [supabase.com/dashboard](https://supabase.com/dashboard)
+    2. Create a new project
+    3. Navigate to **Settings > API** to get your credentials
+
+    ### Run Database Migrations
+
+    eStory includes SQL migrations for all required tables:
+
+    - `001_create_weekly_reflections.sql` - Weekly AI reflection summaries
+    - `002_enable_rls_policies.sql` - Row Level Security policies
+    - `003_add_oauth_fields.sql` - OAuth integration fields
+    - `004_create_habits_tables.sql` - Habit tracking tables
+    - `005_create_waitlist_table.sql` - Waitlist management
+    - `006_create_verified_metrics_tables.sql` - CRE verified metrics
+
+    Run these migrations in order through the Supabase dashboard SQL Editor.
+
+    ### Create Storage Bucket
+
+    Create a storage bucket named `story-audio` for audio file storage:
+
+    1. Go to **Storage** in your Supabase dashboard
+    2. Create a new bucket named `story-audio`
+    3. Set appropriate access policies (authenticated users can upload)
+  </Step>
+
+  <Step title="Install Hardhat for Smart Contracts (Optional)">
+    If you plan to deploy or test smart contracts locally:
+
+    ```bash
+    npm install --save-dev hardhat
+    ```
+
+    <Info>
+      Smart contracts are already deployed to Base Sepolia. This step is only needed if you want to deploy your own instances or run local tests.
+    </Info>
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Run the development server to verify everything is set up correctly:
+
+```bash
+npm run dev
+```
+
+You should see:
+
+```
+▲ Next.js 15.5.9
+- Local:        http://localhost:3000
+- Environments: .env.local
+
+✓ Ready in 2.1s
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser to see the app.
+
+## Project Structure
+
+After installation, your project structure will look like this:
+
+```markdown
+i_story_dapp/
+├── app/                  # Next.js App Router
+│   ├── api/             # API routes
+│   ├── hooks/           # React hooks
+│   ├── types/           # TypeScript definitions
+│   ├── utils/           # Utilities
+│   └── [pages]/         # Application pages
+├── components/          # React components
+│   ├── ui/              # shadcn/ui components
+│   ├── vault/           # Local encryption components
+│   └── Provider.tsx     # Web3 & Theme providers
+├── contracts/           # Solidity smart contracts
+│   ├── eStoryToken.sol
+│   ├── StoryProtocol.sol
+│   └── StoryNFT.sol
+├── lib/                 # Shared libraries
+│   ├── auth.ts          # Authentication utilities
+│   ├── contracts.ts     # Contract addresses & ABIs
+│   └── vault/           # Client-side encryption
+├── scripts/             # Deployment scripts
+├── supabase/           # Database migrations
+├── __tests__/          # Unit tests
+└── e2e/                # E2E tests
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Environment" href="/developers/environment" icon="gear">
+    Set up all required API keys and environment variables
+  </Card>
+  <Card title="Local Development" href="/developers/local-development" icon="code">
+    Learn development workflows and available commands
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Node version errors">
+    eStory requires Node.js 18 or higher. Check your version:
+
+    ```bash
+    node --version
+    ```
+
+    If it's below v18, update Node.js before proceeding.
+  </Accordion>
+
+  <Accordion title="Installation fails with peer dependency warnings">
+    These are typically safe to ignore. If installation fails completely, try:
+
+    ```bash
+    npm install --legacy-peer-deps
+    ```
+  </Accordion>
+
+  <Accordion title="Port 3000 already in use">
+    You can specify a different port:
+
+    ```bash
+    npm run dev -- -p 3001
+    ```
+  </Accordion>
+</AccordionGroup>

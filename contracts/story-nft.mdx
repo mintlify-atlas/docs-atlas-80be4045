@@ -1,0 +1,511 @@
+---
+title: 'StoryNFT (ERC721)'
+description: 'Mint story collections as ERC721 NFTs with royalties'
+icon: 'image'
+---
+
+## Overview
+
+**StoryNFT** allows users to mint story collections as ERC721 NFTs. Each NFT represents a curated book/collection of stories with metadata stored on IPFS.
+
+- **ERC721**: Non-fungible token standard
+- **URI Storage**: Each NFT has a unique metadata URI (IPFS hash)
+- **Royalties**: ERC2981 standard (5% default)
+- **Mint Fee**: 0.001 ETH to prevent spam
+- **Two Mint Types**: Public (paid) and admin-only (weekly winners)
+
+### Contract Address
+
+<CodeGroup>
+```typescript Address
+const STORY_NFT_ADDRESS = "0x6D37ebc5eAEF37ecC888689f295D114187933342";
+```
+
+```bash Base Sepolia Explorer
+https://sepolia.basescan.org/address/0x6D37ebc5eAEF37ecC888689f295D114187933342
+```
+</CodeGroup>
+
+## Token Details
+
+<ParamField path="name" type="string">
+  EStory Collections
+</ParamField>
+
+<ParamField path="symbol" type="string">
+  ESTORY
+</ParamField>
+
+<ParamField path="mintFee" type="uint256">
+  0.001 ether (1000000000000000 wei)
+</ParamField>
+
+<ParamField path="defaultRoyalty" type="uint96">
+  500 basis points (5%)
+</ParamField>
+
+## Contract Code
+
+```solidity contracts/StoryNFT.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
+
+contract StoryNFT is ERC721URIStorage, AccessControl, ERC2981 {
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    uint256 private _nextTokenId;
+
+    uint256 public mintFee = 0.001 ether;
+
+    event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType);
+
+    constructor(address defaultAdmin) ERC721("EStory Collections", "ESTORY") {
+        _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
+        _grantRole(MINTER_ROLE, defaultAdmin);
+        _setDefaultRoyalty(defaultAdmin, 500); // 5%
+    }
+
+    // PUBLIC: Mint a book/collection (requires mint fee)
+    function mintBook(string memory uri) external payable {
+        require(msg.value >= mintFee, "Insufficient mint fee");
+        uint256 tokenId = ++_nextTokenId;
+        _safeMint(msg.sender, tokenId);
+        _setTokenURI(tokenId, uri);
+        emit NFTMinted(tokenId, msg.sender, uri, "BOOK");
+    }
+
+    // ADMIN: Mint weekly winner NFT (free)
+    function mintWeeklyWinner(address winner, string memory uri) external onlyRole(MINTER_ROLE) {
+        uint256 tokenId = ++_nextTokenId;
+        _safeMint(winner, tokenId);
+        _setTokenURI(tokenId, uri);
+        emit NFTMinted(tokenId, winner, uri, "WEEKLY_WINNER");
+    }
+
+    // Admin functions
+    function setMintFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        mintFee = _fee;
+    }
+
+    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No balance to withdraw");
+        (bool success, ) = payable(msg.sender).call{value: balance}("");
+        require(success, "Withdrawal failed");
+    }
+
+    function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setDefaultRoyalty(receiver, feeNumerator);
+    }
+
+    // Overrides
+    function tokenURI(uint256 tokenId) public view override(ERC721URIStorage) returns (string memory) {
+        return super.tokenURI(tokenId);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public view override(ERC721URIStorage, AccessControl, ERC2981) returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+}
+```
+
+## Functions
+
+### mintBook (Public)
+
+Mint a new story collection NFT.
+
+```solidity
+function mintBook(string memory uri) external payable
+```
+
+<ParamField path="uri" type="string" required>
+  IPFS URI containing NFT metadata (e.g., `ipfs://Qm...`)
+</ParamField>
+
+<ParamField path="msg.value" type="uint256" required>
+  Must send at least `mintFee` (0.001 ETH) with transaction
+</ParamField>
+
+<ResponseField name="tokenId" type="uint256">
+  Auto-incremented token ID starting from 1
+</ResponseField>
+
+<ResponseField name="event" type="NFTMinted">
+  Emitted with `tokenId`, `recipient`, `uri`, and `collectionType: "BOOK"`
+</ResponseField>
+
+<Warning>
+**Requirements**:
+- Must send at least 0.001 ETH (reverts if `msg.value < mintFee`)
+- URI should point to valid IPFS metadata
+
+**Use Case**: Users mint NFTs to represent curated story collections (books, themes, weekly highlights).
+</Warning>
+
+### mintWeeklyWinner (Admin Only)
+
+Mint a free NFT for weekly contest winners.
+
+```solidity
+function mintWeeklyWinner(address winner, string memory uri) external onlyRole(MINTER_ROLE)
+```
+
+<ParamField path="winner" type="address" required>
+  Winner's wallet address
+</ParamField>
+
+<ParamField path="uri" type="string" required>
+  IPFS URI for winner's NFT metadata
+</ParamField>
+
+<Note>
+**Admin-Only**: Only addresses with `MINTER_ROLE` can call this.
+
+**Use Case**: Backend calls this to reward weekly challenge winners with free commemorative NFTs.
+</Note>
+
+### setMintFee (Admin Only)
+
+Update the mint fee.
+
+```solidity
+function setMintFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE)
+```
+
+<ParamField path="_fee" type="uint256" required>
+  New mint fee in wei (e.g., 0.001 ether = 1000000000000000)
+</ParamField>
+
+### withdraw (Admin Only)
+
+Withdraw accumulated mint fees.
+
+```solidity
+function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE)
+```
+
+Transfers contract ETH balance to admin.
+
+<Warning>Reverts if balance is 0 or transfer fails.</Warning>
+
+### setDefaultRoyalty (Admin Only)
+
+Update royalty settings for all NFTs.
+
+```solidity
+function setDefaultRoyalty(address receiver, uint96 feeNumerator) external onlyRole(DEFAULT_ADMIN_ROLE)
+```
+
+<ParamField path="receiver" type="address" required>
+  Address to receive royalty payments
+</ParamField>
+
+<ParamField path="feeNumerator" type="uint96" required>
+  Royalty in basis points (500 = 5%, 1000 = 10%)
+</ParamField>
+
+<Note>
+ERC2981 uses basis points: 1 basis point = 0.01%.
+
+Examples:
+- 500 = 5%
+- 1000 = 10%
+- 250 = 2.5%
+</Note>
+
+## Events
+
+### NFTMinted
+
+```solidity
+event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType);
+```
+
+Emitted when an NFT is minted.
+
+<ResponseField name="tokenId" type="uint256">
+  Unique token ID
+</ResponseField>
+
+<ResponseField name="recipient" type="address">
+  NFT owner
+</ResponseField>
+
+<ResponseField name="uri" type="string">
+  IPFS metadata URI
+</ResponseField>
+
+<ResponseField name="collectionType" type="string">
+  Either `"BOOK"` (public mint) or `"WEEKLY_WINNER"` (admin mint)
+</ResponseField>
+
+## NFT Metadata
+
+Each NFT's `tokenURI()` returns an IPFS URI pointing to metadata JSON:
+
+```json Example Metadata (IPFS)
+{
+  "name": "My Life in 2026",
+  "description": "A curated collection of 52 stories from my journey through 2026",
+  "image": "ipfs://QmImageHash...",
+  "attributes": [
+    {
+      "trait_type": "Story Count",
+      "value": 52
+    },
+    {
+      "trait_type": "Date Range",
+      "value": "Jan 2026 - Dec 2026"
+    },
+    {
+      "trait_type": "Word Count",
+      "value": 12500
+    },
+    {
+      "trait_type": "Collection Type",
+      "value": "Annual Book"
+    }
+  ]
+}
+```
+
+<Note>
+**IPFS Best Practices**:
+
+1. Pin metadata to IPFS via Pinata (iStory uses Pinata for persistence)
+2. Generate image from first story or use custom book cover
+3. Include story IDs in metadata for traceability
+4. Use CIDv1 for content addressing: `ipfs://bafybei...`
+</Note>
+
+## Usage Examples
+
+### Mint a Book NFT
+
+<CodeGroup>
+```typescript React Hook
+import { useStoryNFT } from '@/app/hooks/useStoryNFT';
+import { parseEther } from 'viem';
+
+async function mintCollection(ipfsUri: string) {
+  const { mintBook } = useStoryNFT();
+  
+  // Upload metadata to IPFS first (via /api/ipfs/upload)
+  const response = await fetch('/api/ipfs/upload', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: "My 2026 Journey",
+      description: "52 stories from 2026",
+      image: "ipfs://QmImageHash...",
+      attributes: [...]
+    })
+  });
+  const { ipfsUri } = await response.json();
+  
+  // Mint NFT (must send 0.001 ETH)
+  await mintBook(ipfsUri, { value: parseEther("0.001") });
+  
+  toast.success("NFT minted successfully!");
+}
+```
+
+```typescript Direct Contract Call
+import { walletClient, publicClient } from '@/lib/wagmi';
+import { STORY_NFT_ABI, STORY_NFT_ADDRESS } from '@/lib/contracts';
+import { parseEther } from 'viem';
+
+const ipfsUri = "ipfs://Qm...";
+
+const tx = await walletClient.writeContract({
+  address: STORY_NFT_ADDRESS,
+  abi: STORY_NFT_ABI,
+  functionName: 'mintBook',
+  args: [ipfsUri],
+  value: parseEther("0.001") // Mint fee
+});
+
+const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+console.log("Minted! Token ID:", receipt.logs[0].args.tokenId);
+```
+</CodeGroup>
+
+### Get User's NFTs
+
+```typescript Query NFT Balance
+import { useReadContract } from 'wagmi';
+import { STORY_NFT_ABI, STORY_NFT_ADDRESS } from '@/lib/contracts';
+
+const { data: balance } = useReadContract({
+  address: STORY_NFT_ADDRESS,
+  abi: STORY_NFT_ABI,
+  functionName: 'balanceOf',
+  args: [userAddress]
+});
+
+console.log(`User owns ${balance} NFTs`);
+```
+
+### Display NFT Metadata
+
+```typescript Fetch and Display
+import { publicClient } from '@/lib/wagmi';
+import { STORY_NFT_ABI, STORY_NFT_ADDRESS } from '@/lib/contracts';
+
+const tokenId = 1n;
+
+// Get tokenURI
+const uri = await publicClient.readContract({
+  address: STORY_NFT_ADDRESS,
+  abi: STORY_NFT_ABI,
+  functionName: 'tokenURI',
+  args: [tokenId]
+});
+
+// Fetch metadata from IPFS
+const response = await fetch(uri.replace('ipfs://', 'https://ipfs.io/ipfs/'));
+const metadata = await response.json();
+
+console.log("NFT Name:", metadata.name);
+console.log("Description:", metadata.description);
+console.log("Image:", metadata.image);
+```
+
+### Mint Weekly Winner (Backend)
+
+```typescript Admin Mint
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
+import { STORY_NFT_ABI, STORY_NFT_ADDRESS } from '@/lib/contracts';
+
+const account = privateKeyToAccount(process.env.MINTER_PRIVATE_KEY);
+const walletClient = createWalletClient({
+  account,
+  chain: baseSepolia,
+  transport: http()
+});
+
+// Upload winner metadata to IPFS
+const ipfsUri = await uploadWinnerMetadata(winnerId);
+
+// Mint free NFT
+const tx = await walletClient.writeContract({
+  address: STORY_NFT_ADDRESS,
+  abi: STORY_NFT_ABI,
+  functionName: 'mintWeeklyWinner',
+  args: [winnerAddress, ipfsUri]
+});
+
+await publicClient.waitForTransactionReceipt({ hash: tx });
+console.log("Weekly winner NFT minted!");
+```
+
+## Royalties (ERC2981)
+
+StoryNFT implements ERC2981 for automatic royalty distribution on secondary sales.
+
+```solidity Royalty Info
+function royaltyInfo(uint256 tokenId, uint256 salePrice) 
+    external 
+    view 
+    returns (address receiver, uint256 royaltyAmount)
+```
+
+<ParamField path="tokenId" type="uint256">
+  NFT token ID
+</ParamField>
+
+<ParamField path="salePrice" type="uint256">
+  Sale price in wei
+</ParamField>
+
+<ResponseField name="receiver" type="address">
+  Address to receive royalty (default: contract admin)
+</ResponseField>
+
+<ResponseField name="royaltyAmount" type="uint256">
+  5% of sale price (500 basis points)
+</ResponseField>
+
+<Note>
+**Marketplace Integration**: NFT marketplaces like OpenSea and Rarible automatically read `royaltyInfo()` and pay the royalty on secondary sales.
+
+**Example**:
+- NFT sells for 1 ETH
+- Royalty: 0.05 ETH (5%) goes to admin
+- Seller receives: 0.95 ETH
+</Note>
+
+## Security Considerations
+
+<Warning>
+**Mint Fee Protection**:
+
+```solidity
+require(msg.value >= mintFee, "Insufficient mint fee");
+```
+
+Prevents:
+- Spam minting (economic cost)
+- Frontrunning (user must commit ETH)
+
+**Recommendation**: Set `mintFee` high enough to deter abuse but low enough to be accessible (current: 0.001 ETH ≈ $2-4).
+</Warning>
+
+<Note>
+**URI Mutability**:
+
+Token URIs are set once at mint and cannot be changed. This ensures NFT metadata is immutable.
+
+If you need mutable metadata, consider:
+1. Using a metadata service that returns dynamic JSON
+2. Implementing a `setTokenURI()` function with owner check
+3. Using ERC721URIStorage with an admin update function
+</Note>
+
+## Gas Costs
+
+Typical gas costs on Base Sepolia:
+
+| Function | Gas Used | Cost @ 0.1 gwei |
+|----------|----------|------------------|
+| `mintBook()` | ~150,000 | ~0.000015 ETH |
+| `mintWeeklyWinner()` | ~145,000 | ~0.0000145 ETH |
+| `setMintFee()` | ~30,000 | ~0.000003 ETH |
+| `withdraw()` | ~25,000 | ~0.0000025 ETH |
+
+<Note>
+**Base L2 Advantages**:
+- 10x cheaper gas than Ethereum mainnet
+- Fast block times (~2 seconds)
+- EVM-compatible (no code changes from mainnet)
+</Note>
+
+## ABI Reference
+
+```typescript lib/contracts.ts
+export const STORY_NFT_ABI = [
+  "function mintBook(string memory uri)",
+  "function balanceOf(address owner) view returns (uint256)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "event NFTMinted(uint256 indexed tokenId, address indexed recipient, string uri, string collectionType)"
+] as const;
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Blockchain Storage" icon="upload" href="/features/blockchain-storage">
+    Learn how to pin NFT metadata to IPFS via Pinata
+  </Card>
+  <Card title="NFT Minting" icon="gallery-thumbnails" href="/monetization/nft-minting">
+    Build a gallery to showcase user NFT collections
+  </Card>
+</CardGroup>

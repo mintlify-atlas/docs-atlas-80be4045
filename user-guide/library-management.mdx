@@ -1,0 +1,424 @@
+---
+title: 'Library Management'
+description: 'Organize, search, and compile your story collection into NFT books'
+icon: 'books'
+---
+
+## Overview
+
+Your **Library** is the central hub for managing your entire story collection. Browse chronologically, explore patterns, track key moments, and compile stories into NFT books.
+
+<Info>
+  **Smart Organization:** Stories grouped by month, with tabs for different views (stories, books, key moments, themes, life areas).
+</Info>
+
+## Library Interface
+
+### Navigation Tabs (app/library/LibraryPageClient.tsx:493-513)
+
+<Tabs>
+  <Tab title="All">
+    **Month-by-Month Timeline**
+    
+    - Stories and books grouped by date
+    - Collapsible month sections
+    - Current month highlighted with colored dot
+    - Shows count badges (e.g., "5 stories, 2 books")
+    
+    <Tip>
+      Click month header to collapse/expand. Perfect for quickly navigating years of entries.
+    </Tip>
+  </Tab>
+
+  <Tab title="Stories">
+    **Journal Entries Only**
+    
+    - Filters out compiled books
+    - Same month-grouped layout as "All" tab
+    - Shows story_date (when memory occurred)
+    - Private/Public visibility indicators
+  </Tab>
+
+  <Tab title="Books">
+    **Compiled Collections**
+    
+    - NFT books you've minted
+    - Grid view with book covers
+    - Shows story count per book
+    - IPFS hash visible on hover
+    
+    <Info>
+      Books are ERC-721 NFTs on Base Sepolia. View on block explorer via story detail page.
+    </Info>
+  </Tab>
+
+  <Tab title="Key Moments">
+    **Important Stories (Canonical)**
+    
+    - Stories marked as "Key Moment" (is_canonical flag)
+    - Special gold styling with star icon
+    - Shows AI-generated insights
+    - Grouped by life domain (work, relationships, personal growth)
+    
+    <Warning>
+      This feature requires AI analysis to be complete. New stories appear after 5-10 seconds.
+    </Warning>
+  </Tab>
+
+  <Tab title="Themes">
+    **Content Patterns**
+    
+    - AI-extracted themes (gratitude, challenge, celebration, etc.)
+    - Groups stories by common topics
+    - Click theme to view all related stories
+    - Color-coded by theme category
+    
+    <Info>
+      Powered by Gemini 2.5 Flash analysis. Themes extracted from content + metadata.
+    </Info>
+  </Tab>
+
+  <Tab title="Life Areas">
+    **Domain-Based Organization**
+    
+    - Work, Relationships, Health, Finance, Personal Growth, etc.
+    - Pie chart shows distribution across domains
+    - Click domain to filter stories
+    - Useful for reflecting on balance
+  </Tab>
+</Tabs>
+
+## Story Cards
+
+### Card Layout (app/library/LibraryPageClient.tsx:877-1016)
+
+<Accordion title="Story Card Components">
+  **Top Row:**
+  - 📄 Icon (story) or 📚 (book)
+  - Title (truncated to 1 line)
+  - Mood badge (if not neutral)
+  
+  **Middle:**
+  - Content preview (2 lines)
+  - Tags (up to 3 shown)
+  
+  **Bottom Row:**
+  - 👁️ Views count
+  - ❤️ Likes count
+  - 🌍 Public / 🔒 Private indicator
+  - 🔊 Has audio indicator
+  - 📅 Date (story_date for entries, created_at for books)
+  
+  **Hover Effects:**
+  - Shadow grows on hover
+  - Share icon appears
+  - Slight upward lift animation
+</Accordion>
+
+### Visibility Indicators
+
+| Icon | Meaning | Access |
+|------|---------|--------|
+| 🌍 Globe | **Public** | Visible on social feed, anyone can view |
+| 🔒 Lock | **Private** | Only you can access, requires authentication |
+| 🔊 Volume | Has audio | Story includes voice recording |
+
+## Search & Filtering
+
+### Search Bar (app/library/LibraryPageClient.tsx:478-490)
+
+<Steps>
+  <Step title="Text Search">
+    Search across:
+    - Story titles
+    - Content (full-text)
+    - Tags
+    
+    <Tip>
+      Search is case-insensitive and matches partial words ("tok" finds "Tokyo").
+    </Tip>
+  </Step>
+
+  <Step title="Filter by Tab">
+    Combine search with tab selection:
+    - Search in "Themes" tab → filters by theme name
+    - Search in "Stories" tab → searches only journal entries
+    - Search in "All" tab → searches everything
+  </Step>
+
+  <Step title="Clear Search">
+    Click ❌ in search bar or delete text to show all entries.
+  </Step>
+</Steps>
+
+## Compiling Books
+
+### Multi-Select Mode (app/library/LibraryPageClient.tsx:313-396)
+
+<Steps>
+  <Step title="Start Compilation">
+    Click **Compile Book** button in Quick Actions section.
+    
+    **What happens:**
+    - Cards enter selection mode
+    - Checkboxes appear on story cards
+    - "Cancel" and "Create Book (n)" buttons replace actions
+  </Step>
+
+  <Step title="Select Stories">
+    Click story cards to toggle selection:
+    - ✅ Blue border = selected
+    - ⬜ Gray border = not selected
+    - Books are not selectable (only journal entries)
+    
+    <Info>
+      Minimum 2 stories required to create a book.
+    </Info>
+  </Step>
+
+  <Step title="Create Book Metadata">
+    Click **Create Book (n)** button. Dialog opens:
+    
+    **Required Fields:**
+    - **Book Title**: Name for your collection
+    - **Description**: What this book is about
+    
+    **Metadata Generation:**
+    ```json
+    {
+      "name": "Summer Memories 2024",
+      "description": "Stories from my trip to Japan",
+      "external_url": "https://estory.vercel.app",
+      "attributes": [
+        { "trait_type": "Author", "value": "Your Name" },
+        { "trait_type": "Stories", "value": 5 }
+      ],
+      "stories": [
+        { "title": "Day 1 - Arrival", "content": "...", "audio": "...", "date": "2024-07-01" },
+        ...
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="IPFS Upload">
+    Book metadata uploaded to IPFS via Pinata:
+    - Returns IPFS hash (e.g., `QmX...`)
+    - Token URI: `ipfs://{hash}`
+    - Immutable and permanent
+    
+    <Warning>
+      IPFS upload is irreversible. Double-check metadata before creating.
+    </Warning>
+  </Step>
+
+  <Step title="NFT Minting">
+    **Smart Contract Interaction:**
+    
+    Calls `StoryNFT.mintBook(tokenURI)` on Base Sepolia:
+    - Mints ERC-721 NFT to your wallet
+    - Pays 0.001 ETH mint fee
+    - You sign transaction in wallet
+    - NFT appears in your wallet (OpenSea, etc.)
+    
+    <Info>
+      **Contract:** `0x6D37ebc5...` (see lib/contracts.ts for full address)
+    </Info>
+  </Step>
+
+  <Step title="Database Record">
+    Book saved to `books` table via `/api/books` POST:
+    
+    **Fields:**
+    - `author_id`, `author_wallet`: Your identifiers
+    - `title`, `description`: Book metadata
+    - `story_ids`: Array of included story IDs
+    - `ipfs_hash`: Content address
+    - `created_at`: Timestamp
+    
+    Success toast: "Book Created & Minted!"
+  </Step>
+</Steps>
+
+### Daily Journal Compilation
+
+<Accordion title="Auto-Compile Today's Stories">
+  If you record **2+ stories on the same day**, a special prompt appears in Profile page:
+  
+  **"Daily Recap Available"**
+  - Bundles all today's stories into one book
+  - Auto-generates title: "Daily Journal - {date}"
+  - One-click compilation
+  - Perfect for daily journaling habit
+  
+  <Tip>
+    Daily journals are a great way to build a consistent NFT collection.
+  </Tip>
+</Accordion>
+
+## Statistics
+
+### Quick Stats Cards (app/library/LibraryPageClient.tsx:443-475)
+
+<CardGroup cols={4}>
+  <Card title="Total Stories" icon="file-text">
+    Count of all journal entries (excludes books).
+  </Card>
+  
+  <Card title="Key Moments" icon="star">
+    Stories marked as canonical (important milestones).
+  </Card>
+  
+  <Card title="Books Created" icon="book-open">
+    Number of compiled NFT collections.
+  </Card>
+  
+  <Card title="Months Active" icon="calendar">
+    How many months you've been journaling.
+  </Card>
+</CardGroup>
+
+### Activity Insights
+
+<Info>
+  Stats are **real-time**—no caching. Reflect immediate changes after saving stories or creating books.
+</Info>
+
+## Patterns & Discovery
+
+### Themes View (components/patterns/ThemesView.tsx)
+
+<Accordion title="How Themes Work">
+  **AI-Generated Themes:**
+  
+  Gemini 2.5 Flash analyzes story content and extracts recurring themes:
+  - Gratitude
+  - Challenge & Resilience
+  - Personal Growth
+  - Relationships
+  - Celebration
+  - Reflection
+  
+  **Theme Groups:**
+  - Each theme shows story count
+  - Click to expand and view stories
+  - Color-coded badges
+  - Sorted by frequency (most common first)
+  
+  <Tip>
+    Themes reveal patterns in your journaling. Notice what you write about most!
+  </Tip>
+</Accordion>
+
+### Life Domains View (components/patterns/DomainsView.tsx)
+
+<Accordion title="Domain Classification">
+  **AI categorizes stories into life areas:**
+  
+  - **Work & Career**: Job, projects, professional growth
+  - **Relationships**: Family, friends, romance
+  - **Health & Wellness**: Physical health, mental health, fitness
+  - **Finance**: Money, investments, financial goals
+  - **Personal Growth**: Learning, skills, self-improvement
+  - **Leisure & Hobbies**: Travel, entertainment, hobbies
+  - **Spirituality**: Faith, meditation, purpose
+  
+  **Visual Distribution:**
+  - Pie chart shows percentage per domain
+  - Click domain to filter stories
+  - Helps identify imbalance (e.g., too much work, not enough leisure)
+  
+  <Info>
+    Domain insights powered by `usePatterns` hook (app/hooks/usePatterns.ts).
+  </Info>
+</Accordion>
+
+## Month Grouping Logic
+
+### How Stories are Grouped (app/library/LibraryPageClient.tsx:98-145)
+
+<Accordion title="Month Grouping Algorithm">
+  **Key Dates:**
+  - **Stories**: Grouped by `story_date` (when memory occurred)
+  - **Books**: Grouped by `created_at` (when book was compiled)
+  
+  **Sorting:**
+  1. Groups sorted newest month first (descending)
+  2. Within each group, entries sorted by date (descending)
+  3. Current month highlighted with special styling
+  
+  **Collapsed State:**
+  - All months start expanded
+  - Click month header to collapse
+  - State persists in component (not localStorage)
+  - Refreshing page resets to all expanded
+  
+  <Tip>
+    Use collapse feature to hide old entries when browsing recent stories.
+  </Tip>
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Stories not appearing in library">
+    **Possible causes:**
+    - Story is still being saved (wait for toast confirmation)
+    - Database sync delay
+    - You're signed in with different account
+    
+    **Solution:**
+    1. Refresh the page (library fetches on mount)
+    2. Check Profile page—does story count increase?
+    3. Verify you're signed in (check nav bar for wallet address)
+  </Accordion>
+
+  <Accordion title="Book compilation fails at minting step">
+    **Common issues:**
+    - Insufficient ETH for gas fees
+    - You rejected transaction in wallet
+    - Network congestion (Base Sepolia)
+    
+    **Solution:**
+    1. Get testnet ETH from Base Sepolia faucet
+    2. Approve transaction when prompted
+    3. Wait 30 seconds, try again if failed
+    4. Check wallet for "Pending" transactions
+  </Accordion>
+
+  <Accordion title="Key Moments tab is empty but I have stories">
+    **Why this happens:**
+    - AI analysis not complete yet (takes 5-10 seconds after saving)
+    - None of your stories marked as canonical
+    - Analysis failed (check console for errors)
+    
+    **Solution:**
+    1. Wait a minute, refresh library
+    2. Mark stories as canonical manually (coming soon)
+    3. Check browser console for API errors
+  </Accordion>
+
+  <Accordion title="Search returns no results but I know story exists">
+    **Troubleshooting:**
+    - Check spelling (search is case-insensitive but exact match)
+    - Try searching single words instead of full phrases
+    - Clear search and browse manually
+    - Story might be in different month than expected
+    
+    **Example:**
+    ❌ "Tokyo trip day one" → no match
+    ✅ "Tokyo" → finds all Tokyo stories
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cognitive Insights" icon="file" href="/features/cognitive-insights">
+    Click any story card to see full content, AI insights, and CRE verification.
+  </Card>
+  
+  <Card title="Share on Social Feed" icon="share" href="/social/community-feed">
+    Make stories public to share with the iStory community.
+  </Card>
+</CardGroup>

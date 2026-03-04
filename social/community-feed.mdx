@@ -1,0 +1,180 @@
+---
+title: 'Community Feed'
+description: 'Discover and engage with stories from writers around the world'
+icon: 'users'
+---
+
+## Overview
+
+The Community Feed is the heart of iStory's social experience. Browse public stories from creators worldwide, discover trending narratives, and connect with writers who share your interests.
+
+<Info>
+  Access the feed at `/social` — no wallet connection required to browse, but you'll need to connect to interact.
+</Info>
+
+## Browsing Stories
+
+The feed offers three curated views to help you discover content:
+
+<CardGroup cols={3}>
+  <Card title="Latest" icon="clock">
+    Real-time feed of recently published stories, sorted by creation date.
+  </Card>
+  <Card title="Trending" icon="trending-up">
+    Stories with high engagement (5+ likes) that are gaining traction in the community.
+  </Card>
+  <Card title="Following" icon="user-check">
+    Stories from creators you follow — your personalized content stream.
+  </Card>
+</CardGroup>
+
+### Search and Filter
+
+Use the search bar to find stories by:
+- **Title** keywords
+- **Content** text
+- **Tags** like `#mindfulness`, `#tech`, or `#travel`
+
+Click any trending tag in the sidebar to filter instantly.
+
+## Story Cards
+
+Each story in the feed displays:
+
+- **Author Profile**: Avatar, name, username, badges, and follower count
+- **Story Metadata**: 
+  - Date of memory (story_date)
+  - Privacy status (Public/Private indicator)
+  - Audio availability (Headphones icon for voice recordings)
+- **Content Preview**: Full text for public stories, teaser for paywalled content
+- **Verified Badge**: Quality tier from Chainlink CRE analysis (Gold/Silver/Bronze)
+- **Key Moment Indicator**: Star icon for canonical/important stories
+- **Engagement Stats**: Likes, comments, and shares
+
+### Story Tones
+
+Stories with AI-analyzed emotional tones display a colored left border:
+
+- **Reflective**: Thoughtful, introspective moments
+- **Joyful**: Happy, celebratory memories
+- **Anxious**: Worried, uncertain feelings
+- **Hopeful**: Optimistic, forward-looking
+- **Peaceful**: Calm, serene experiences
+- **Grateful**: Thankful, appreciative sentiments
+
+<Tip>
+  The emotional tone is automatically detected by Gemini AI during story creation.
+</Tip>
+
+## Real-Time Updates
+
+The feed uses **server-side rendering** with periodic refreshes:
+
+```typescript
+// Source: app/social/SocialPageClient.tsx:118-146
+const res = await fetch("/api/stories/feed");
+const { stories } = await res.json();
+```
+
+Follow status is fetched in batch for all visible authors:
+
+```typescript
+// Source: app/social/SocialPageClient.tsx:164-179
+const followRes = await fetch(
+  `/api/social/follow?follower_wallet=${address}&followed_wallets=${authorWallets.join(",")}`
+);
+```
+
+## Featured Writers
+
+The right sidebar showcases top creators:
+
+- **Follower count** and **story count** stats
+- **Specialty tags** (e.g., "Life Philosophy", "Travel Adventures")
+- **Quick follow buttons** for one-tap connections
+
+<Note>
+  Featured writers are curated based on engagement metrics and content quality.
+</Note>
+
+## Community Stats
+
+The dashboard displays live metrics:
+
+<Steps>
+  <Step title="Stories Today">
+    Total count of stories published in the last 24 hours
+  </Step>
+  <Step title="Active Writers">
+    Number of creators who have published this week
+  </Step>
+  <Step title="Trending Topic">
+    Most-used hashtag across recent stories (e.g., `#mindful`)
+  </Step>
+  <Step title="Your $STORY Balance">
+    Real-time token balance from your connected wallet
+  </Step>
+</Steps>
+
+## Privacy and Access
+
+The feed respects creator privacy settings:
+
+- **Public stories**: Full content visible to everyone
+- **Paywalled stories**: Teaser + unlock prompt (see [Earning](/monetization/earning))
+- **Private stories**: Never appear in the community feed
+
+<Info>
+  Row-Level Security (RLS) policies ensure private stories are never exposed, even via API routes.
+</Info>
+
+## Technical Implementation
+
+### Data Flow
+
+```mermaid
+graph LR
+  A[Social Feed] --> B[/api/stories/feed]
+  B --> C[Supabase Admin Client]
+  C --> D[Stories Table]
+  D --> E[Users Join]
+  E --> F[Filter Public Only]
+  F --> G[Return with Author Data]
+```
+
+### Follow Status Check
+
+Batch follow lookups optimize performance:
+
+```typescript
+// Source: app/api/social/follow/route.ts:38-42
+const { data } = await admin
+  .from("follows")
+  .select("followed_wallet")
+  .eq("follower_wallet", followerWallet)
+  .in("followed_wallet", followedWallets);
+```
+
+### Story Card Components
+
+The `StoryCard` component (source: `components/StoryCard.tsx:49-368`) handles:
+
+- **Optimistic UI updates** for likes and follows
+- **Verified metrics display** from CRE analysis
+- **Paywall unlock flow** with token approval checks
+- **Responsive layouts** (default, compact, featured variants)
+
+<Tip>
+  Use `variant="compact"` in library/grid views for space-efficient story cards.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Engagement Actions" icon="heart" href="/social/engagement">
+    Learn how to like, follow, share, and tip creators
+  </Card>
+  <Card title="Earning $STORY" icon="coins" href="/monetization/earning">
+    Monetize your stories with tips and paywalls
+  </Card>
+</CardGroup>

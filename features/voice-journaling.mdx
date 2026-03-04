@@ -1,0 +1,186 @@
+---
+title: Voice Journaling
+description: Capture your stories hands-free with AI-powered voice-to-text transcription
+icon: mic
+---
+
+## What is Voice Journaling?
+
+Voice Journaling transforms spoken memories into written stories using AI transcription. Simply tap to record, speak naturally, and watch your words appear as text—no typing required. Every recording is processed through ElevenLabs Scribe AI for accurate, multi-language transcription.
+
+## Why Use Voice Journaling?
+
+<CardGroup cols={2}>
+  <Card title="Natural & Fast" icon="bolt">
+    Capture thoughts 3x faster than typing. Perfect for recording moments as they happen.
+  </Card>
+  <Card title="Hands-Free" icon="hand">
+    Record while walking, cooking, or relaxing. No keyboard needed.
+  </Card>
+  <Card title="Multi-Language" icon="language">
+    Supports English and multiple languages with automatic detection.
+  </Card>
+  <Card title="Noise Cancellation" icon="waveform">
+    Built-in echo cancellation and noise suppression for clear recordings.
+  </Card>
+</CardGroup>
+
+## How to Record a Story
+
+<Steps>
+  <Step title="Start Recording">
+    Navigate to the **Record** page and tap the large microphone button. Grant microphone permissions if prompted.
+    
+    <Info>The button glows with animated rings while recording to show you're live.</Info>
+  </Step>
+
+  <Step title="Speak Your Story">
+    Talk naturally and clearly. The recording duration appears in real-time (MM:SS format).
+    
+    **Recording Tips:**
+    - Speak at a moderate pace
+    - Find a quiet environment
+    - Hold phone/device 6-12 inches from your mouth
+    - Pause briefly between thoughts for better segmentation
+  </Step>
+
+  <Step title="Stop Recording">
+    Tap the microphone button again (now showing a square icon). Your audio is automatically sent for transcription.
+    
+    <Note>Transcription starts immediately after you stop—no extra button needed.</Note>
+  </Step>
+
+  <Step title="Review Transcription">
+    The transcribed text appears in the **Content** section below. You can:
+    - Edit the text manually if needed
+    - Enhance it with AI grammar/flow improvements
+    - Read it aloud using text-to-speech
+  </Step>
+
+  <Step title="Add Details">
+    Before saving:
+    - **Title**: Add a descriptive title (auto-suggested based on date)
+    - **Date**: Set the memory date (backdate to when it actually happened)
+    - **Visibility**: Choose Private (vault-encrypted) or Public (visible on feed)
+  </Step>
+
+  <Step title="Save to Blockchain">
+    Tap **Save Privately** or **Publish & Save**. Your story is:
+    - Uploaded to **IPFS** (permanent decentralized storage)
+    - Saved to **Supabase** (cloud database with metadata)
+    - Encrypted in **Local Vault** (if vault is unlocked)
+    - Pinned with your wallet address as author proof
+  </Step>
+</Steps>
+
+## Recording Interface Walkthrough
+
+### Microphone Button States
+
+| State | Visual | Action |
+|-------|--------|--------|
+| **Idle** | Blue gradient with soft glow | Tap to start recording |
+| **Recording** | Red background with pulsing rings | Tap to stop recording |
+| **Processing** | Disabled (grayed out) | Transcription in progress |
+
+### Audio Specifications
+
+```yaml
+Format: WebM audio
+Sample Rate: 16kHz (optimized for voice)
+Max File Size: 25MB per recording
+Quality: Echo cancellation + noise suppression enabled
+```
+
+### Draft Auto-Save
+
+<Tip>
+  Your work is automatically saved to `sessionStorage` every 500ms. If you accidentally close the tab, your draft will be restored when you return to the Record page.
+</Tip>
+
+## Advanced Features
+
+<Accordion title="Text-to-Speech Playback">
+  Click **Read Aloud** to hear your transcribed story using the browser's built-in speech synthesis. Useful for:
+  - Proofreading by ear
+  - Accessibility (visually impaired users)
+  - Multi-tasking while reviewing
+</Accordion>
+
+<Accordion title="Backdating Stories">
+  The **Date of Memory** field lets you set when the story actually happened (not when you recorded it). Two timestamps are preserved:
+  - `story_date`: User-selected memory date
+  - `created_at`: Actual upload timestamp
+  
+  This enables accurate timeline visualization in your library.
+</Accordion>
+
+<Accordion title="Audio Retention">
+  Original audio files are stored in Supabase Storage and linked to your story. The `has_audio` flag in metadata indicates audio availability. Audio URLs are private—only you can access them.
+</Accordion>
+
+## Supported Audio Formats
+
+The transcription API accepts:
+
+- `audio/webm` (default from browser recorder)
+- `audio/wav`
+- `audio/mp3`, `audio/mpeg`
+- `audio/ogg`
+- `audio/flac`
+- `audio/m4a`, `audio/mp4`
+
+<Warning>
+  Maximum file size is **25MB**. Recordings exceeding this limit will be rejected with a 400 error.
+</Warning>
+
+## Troubleshooting
+
+### "Failed to access microphone"
+
+**Solution:** Grant microphone permissions in your browser:
+- **Chrome/Edge**: Click the lock icon in the address bar → Site settings → Microphone → Allow
+- **Safari**: Safari menu → Settings → Websites → Microphone → Allow
+- **Firefox**: Click the microphone icon in address bar → Allow
+
+### "Transcription returned empty result"
+
+**Causes:**
+- Recording was too short (< 1 second)
+- Audio quality too poor (high background noise)
+- Silence throughout recording
+
+**Solution:** Re-record in a quieter environment and speak clearly.
+
+### Recording cuts off unexpectedly
+
+**Solution:** Check that your browser tab stays active. Some browsers pause media recording when the tab is backgrounded.
+
+## Privacy & Security
+
+<Info>
+  **Your voice data is processed securely:**
+  - Audio is sent directly to ElevenLabs Scribe API (no server storage during processing)
+  - Transcription happens in encrypted transit (HTTPS)
+  - Original audio stored in Supabase with RLS (Row-Level Security)
+  - Only you can access your audio files via authenticated API routes
+</Info>
+
+## Next Steps
+
+After recording your first story:
+
+<CardGroup cols={2}>
+  <Card title="AI Enhancement" icon="wand-magic-sparkles" href="/features/ai-enhancement">
+    Polish your transcription with AI grammar and style improvements
+  </Card>
+  <Card title="Cognitive Insights" icon="brain" href="/features/cognitive-insights">
+    Extract themes, emotions, and patterns from your stories
+  </Card>
+  <Card title="Local Vault" icon="lock" href="/features/local-vault">
+    Encrypt private stories with military-grade AES-256 encryption
+  </Card>
+  <Card title="Blockchain Storage" icon="link" href="/features/blockchain-storage">
+    Understand how your stories are permanently stored on IPFS
+  </Card>
+</CardGroup>

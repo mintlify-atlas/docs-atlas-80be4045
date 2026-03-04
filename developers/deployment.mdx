@@ -1,0 +1,428 @@
+---
+title: Deployment
+description: Deploy iStory to production - frontend, smart contracts, and infrastructure setup
+---
+
+iStory is built on Next.js 15 and can be deployed to any Node.js hosting platform. This guide covers deployment to Vercel (recommended), smart contract deployment to Base Sepolia, and infrastructure setup.
+
+## Frontend Deployment
+
+### Vercel (Recommended)
+
+Vercel provides the best experience for Next.js applications with zero-config deployment.
+
+<Steps>
+  <Step title="Install Vercel CLI">
+    ```bash
+    npm install -g vercel
+    ```
+  </Step>
+  
+  <Step title="Build locally first">
+    ```bash
+    npm run build
+    ```
+    Ensure the build passes without errors
+  </Step>
+  
+  <Step title="Deploy to production">
+    ```bash
+    vercel --prod
+    ```
+    Follow the prompts to link your project
+  </Step>
+</Steps>
+
+<Note>
+Vercel automatically detects Next.js and uses the correct build command (`npm run build`) and start command (`npm run start`).
+</Note>
+
+### Environment Variables
+
+Configure these in your Vercel project settings:
+
+<AccordionGroup>
+  <Accordion title="Supabase Configuration" icon="database">
+    ```env
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+    ```
+  </Accordion>
+  
+  <Accordion title="AI Services" icon="brain">
+    ```env
+    GOOGLE_GENERATIVE_AI_API_KEY=your_google_gemini_key
+    ELEVENLABS_API_KEY=your_elevenlabs_key
+    ANTHROPIC_API_KEY=your_anthropic_key
+    ```
+  </Accordion>
+  
+  <Accordion title="Web3 & Blockchain" icon="link">
+    ```env
+    NEXT_PUBLIC_PROJECT_ID=your_walletconnect_project_id
+    NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS=0x...
+    NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS=0x...
+    NEXT_PUBLIC_STORY_NFT_ADDRESS=0x...
+    NEXT_PUBLIC_VERIFIED_METRICS_ADDRESS=0x...
+    NEXT_PUBLIC_PRIVATE_VERIFIED_METRICS_ADDRESS=0x...
+    ```
+  </Accordion>
+  
+  <Accordion title="IPFS & Storage" icon="cloud">
+    ```env
+    PINATA_API_KEY=your_pinata_api_key
+    PINATA_SECRET_API_KEY=your_pinata_secret
+    ```
+  </Accordion>
+  
+  <Accordion title="Security & Email" icon="shield">
+    ```env
+    CRON_SECRET=your_cron_secret
+    RESEND_API_KEY=your_resend_api_key
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Alternative Hosting
+
+For other Node.js hosting platforms:
+
+<CodeGroup>
+```bash Build Production
+npm run build
+```
+
+```bash Start Production Server
+npm run start
+```
+
+```bash Docker (optional)
+docker build -t istory .
+docker run -p 3000:3000 istory
+```
+</CodeGroup>
+
+<Warning>
+Ensure Node.js version is 18+ and all environment variables are properly configured before deployment.
+</Warning>
+
+## Smart Contract Deployment
+
+### Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Hardhat Setup" icon="hammer">
+    Hardhat is pre-configured in the project
+  </Card>
+  <Card title="Base Sepolia" icon="network-wired">
+    Testnet access via MetaMask or similar wallet
+  </Card>
+  <Card title="Private Key" icon="key">
+    Set in `.env.local` for deployment
+  </Card>
+  <Card title="Basescan API" icon="magnifying-glass">
+    For contract verification
+  </Card>
+</CardGroup>
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Configure environment">
+    Add to `.env.local`:
+    ```env
+    PRIVATE_KEY=your_wallet_private_key
+    BASESCAN_API_KEY=your_basescan_api_key
+    ```
+  </Step>
+  
+  <Step title="Compile contracts">
+    ```bash
+    npx hardhat compile
+    ```
+  </Step>
+  
+  <Step title="Deploy to Base Sepolia">
+    ```bash
+    npx hardhat run scripts/deploy.ts --network baseSepolia
+    ```
+    
+    This deploys three core contracts:
+    - **EStoryToken** (ERC20) - `$STORY` token with 100M max supply
+    - **StoryProtocol** - Tips and paywall payments
+    - **StoryNFT** (ERC721) - Story books as NFTs with 0.001 ETH mint fee
+  </Step>
+  
+  <Step title="Verify deployment">
+    ```bash
+    npx hardhat run scripts/verify-deployment.ts --network baseSepolia
+    ```
+    
+    Validates deployed ABIs match expected interfaces
+  </Step>
+  
+  <Step title="Update configuration">
+    Copy contract addresses to:
+    - `lib/contracts.ts`
+    - `.env.local` (as shown in Environment Variables section)
+  </Step>
+</Steps>
+
+### Deployment Script
+
+The `scripts/deploy.ts` handles automated deployment:
+
+```typescript scripts/deploy.ts
+import { ethers } from "hardhat";
+
+async function main() {
+  const [deployer] = await ethers.getSigners();
+  console.log("Deploying contracts with the account:", deployer.address);
+
+  // 1. Deploy EStoryToken
+  const EStoryToken = await ethers.getContractFactory("EStoryToken");
+  const token = await EStoryToken.deploy(deployer.address);
+  await token.waitForDeployment();
+  const tokenAddress = await token.getAddress();
+  console.log(`EStoryToken deployed to: ${tokenAddress}`);
+
+  // 2. Deploy StoryProtocol
+  const StoryProtocol = await ethers.getContractFactory("StoryProtocol");
+  const protocol = await StoryProtocol.deploy(tokenAddress, deployer.address);
+  await protocol.waitForDeployment();
+  const protocolAddress = await protocol.getAddress();
+  console.log(`StoryProtocol deployed to: ${protocolAddress}`);
+
+  // 3. Deploy StoryNFT
+  const StoryNFT = await ethers.getContractFactory("StoryNFT");
+  const nft = await StoryNFT.deploy(deployer.address);
+  await nft.waitForDeployment();
+  const nftAddress = await nft.getAddress();
+  console.log(`StoryNFT deployed to: ${nftAddress}`);
+
+  console.log("\n--- SAVE THESE ADDRESSES ---");
+  console.log("Update lib/contracts.ts and .env.local with these addresses");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+### Verification Script
+
+The `scripts/verify-deployment.ts` ensures contracts are correctly deployed:
+
+```typescript scripts/verify-deployment.ts
+async function main() {
+  const tokenAddress = process.env.NEXT_PUBLIC_ESTORY_TOKEN_ADDRESS;
+  const protocolAddress = process.env.NEXT_PUBLIC_STORY_PROTOCOL_ADDRESS;
+  const nftAddress = process.env.NEXT_PUBLIC_STORY_NFT_ADDRESS;
+
+  // Verify EStoryToken
+  const token = await ethers.getContractAt("EStoryToken", tokenAddress);
+  const name = await token.name();
+  const symbol = await token.symbol();
+  const maxSupply = await token.MAX_SUPPLY();
+  
+  if (name !== "eStoryToken") throw new Error(`Expected name 'eStoryToken'`);
+  if (symbol !== "ESTORY") throw new Error(`Expected symbol 'ESTORY'`);
+  if (maxSupply !== ethers.parseEther("100000000")) throw new Error("MAX_SUPPLY mismatch");
+  
+  console.log("✓ EStoryToken verified successfully");
+  // ... similar checks for StoryProtocol and StoryNFT
+}
+```
+
+### Contract Verification on Basescan
+
+```bash
+npx hardhat run scripts/verify.ts --network baseSepolia
+```
+
+This publishes and verifies your contract source code on Basescan, making it publicly viewable and auditable.
+
+## Database Setup (Supabase)
+
+<Steps>
+  <Step title="Create Supabase project">
+    Sign up at [supabase.com](https://supabase.com) and create a new project
+  </Step>
+  
+  <Step title="Run migrations">
+    Execute SQL migrations in order:
+    - `001_create_weekly_reflections.sql`
+    - `002_enable_rls_policies.sql`
+    - `003_add_oauth_fields.sql`
+  </Step>
+  
+  <Step title="Create storage bucket">
+    Create a public bucket named `story-audio` for audio file uploads
+  </Step>
+  
+  <Step title="Configure authentication">
+    Enable Google OAuth and/or email authentication in Supabase dashboard
+  </Step>
+  
+  <Step title="Copy credentials">
+    Add Supabase URL and keys to `.env.local`
+  </Step>
+</Steps>
+
+<Note>
+Row Level Security (RLS) policies are critical for data privacy. Ensure they're enabled and properly configured for all tables.
+</Note>
+
+## IPFS Setup (Pinata)
+
+For decentralized file storage:
+
+<Steps>
+  <Step title="Create Pinata account">
+    Sign up at [pinata.cloud](https://pinata.cloud)
+  </Step>
+  
+  <Step title="Generate API keys">
+    Create API key and secret in Pinata dashboard
+  </Step>
+  
+  <Step title="Configure in environment">
+    ```env
+    PINATA_API_KEY=your_api_key
+    PINATA_SECRET_API_KEY=your_secret
+    ```
+  </Step>
+</Steps>
+
+## Pre-Deployment Checklist
+
+<Steps>
+  <Step title="Run linting">
+    ```bash
+    npm run lint
+    ```
+    Fix all linting errors
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    npx vitest run
+    npx playwright test
+    ```
+    Ensure all tests pass
+  </Step>
+  
+  <Step title="Test production build">
+    ```bash
+    npm run build
+    npm run start
+    ```
+    Verify the app runs correctly in production mode
+  </Step>
+  
+  <Step title="Check environment variables">
+    Ensure all required variables are set (use `.env.example` as reference)
+  </Step>
+  
+  <Step title="Verify contracts">
+    Run `verify-deployment.ts` to ensure contract ABIs are correct
+  </Step>
+</Steps>
+
+## Post-Deployment
+
+<CardGroup cols={2}>
+  <Card title="Monitor Logs" icon="chart-line">
+    Use Vercel dashboard to monitor application logs and errors
+  </Card>
+  <Card title="Test Wallet Connection" icon="wallet">
+    Connect MetaMask to Base Sepolia and test transactions
+  </Card>
+  <Card title="Verify API Routes" icon="code">
+    Test authentication, AI endpoints, and social features
+  </Card>
+  <Card title="Check SEO" icon="magnifying-glass">
+    Verify sitemap, robots.txt, and Open Graph images are working
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails on Vercel">
+    Check that `package.json` scripts are correct:
+    - `"build": "next build"`
+    - `"start": "next start"`
+    - `"dev": "next dev -p 3000"`
+    
+    Never point these to Expo commands.
+  </Accordion>
+  
+  <Accordion title="Environment variables not working">
+    Ensure variables are set in Vercel project settings, not just `.env.local`. Public variables must start with `NEXT_PUBLIC_`.
+  </Accordion>
+  
+  <Accordion title="Contract deployment fails">
+    - Verify private key is correctly formatted (no `0x` prefix in `.env.local`)
+    - Ensure wallet has enough Base Sepolia ETH for gas fees
+    - Check network configuration in `hardhat.config.ts`
+  </Accordion>
+  
+  <Accordion title="CORS errors">
+    Configure allowed origins in `next.config.mjs` security headers. Ensure Supabase and API routes return correct CORS headers.
+  </Accordion>
+</AccordionGroup>
+
+## CI/CD Pipeline
+
+Example GitHub Actions workflow:
+
+```yaml .github/workflows/deploy.yml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm install
+      - run: npm run lint
+      - run: npx vitest run
+      - run: npm run build
+      - uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.ORG_ID }}
+          vercel-project-id: ${{ secrets.PROJECT_ID }}
+          vercel-args: '--prod'
+```
+
+## Performance Optimization
+
+<CardGroup cols={2}>
+  <Card title="Bundle Size" icon="weight">
+    Target: Keep pages under 500 kB First Load JS
+  </Card>
+  <Card title="Image Optimization" icon="image">
+    Use Next.js `<Image>` component for automatic optimization
+  </Card>
+  <Card title="Code Splitting" icon="scissors">
+    Dynamic imports for heavy components (Three.js, etc.)
+  </Card>
+  <Card title="Caching" icon="database">
+    Leverage Vercel Edge caching for static assets
+  </Card>
+</CardGroup>
+
+<Note>
+Run Lighthouse audits regularly to monitor Core Web Vitals. Target score: 70+ on mobile.
+</Note>

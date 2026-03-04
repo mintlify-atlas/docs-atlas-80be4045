@@ -1,0 +1,300 @@
+---
+title: 'Earning $STORY'
+description: 'Monetize your stories through tips, paywalls, and creator rewards'
+icon: 'coins'
+---
+
+## Overview
+
+iStory creators earn $STORY tokens through multiple revenue streams: direct tips from readers, paywalled content unlocks, and on-chain rewards. All earnings are paid directly to your wallet — no platform fees, no intermediaries.
+
+<Info>
+  $STORY is an ERC20 token on Base (Ethereum L2) with a max supply of 100 million tokens.
+</Info>
+
+## Revenue Streams
+
+<CardGroup cols={3}>
+  <Card title="Tips" icon="hand-holding-dollar">
+    Readers send 1-50 $STORY per story as appreciation for your work.
+  </Card>
+  <Card title="Paywalls" icon="lock">
+    Set a price to unlock premium content — you keep 100% of unlock fees.
+  </Card>
+  <Card title="Rewards" icon="trophy">
+    Earn tokens from engagement, streaks, and quality metrics (coming soon).
+  </Card>
+</CardGroup>
+
+## Receiving Tips
+
+Tips are the simplest form of creator revenue.
+
+### How Tips Work
+
+<Steps>
+  <Step title="Reader Discovers Your Story">
+    Your public story appears in the community feed or trending section.
+  </Step>
+  <Step title="Reader Adjusts Tip Amount">
+    They use the slider to choose 1-50 $STORY tokens.
+  </Step>
+  <Step title="Reader Clicks 'Tip [amount]'">
+    The StoryProtocol smart contract executes the transfer:
+    ```solidity
+    // Source: contracts/StoryProtocol.sol:30-38
+    function tipCreator(address creator, uint256 amount, uint256 storyId) 
+      external nonReentrant whenNotPaused {
+      require(amount > 0, "Amount must be > 0");
+      storyToken.safeTransferFrom(msg.sender, creator, amount);
+      emit TipSent(msg.sender, creator, amount, storyId);
+    }
+    ```
+  </Step>
+  <Step title="Tokens Arrive in Your Wallet">
+    The tip is sent directly to your wallet address — instant settlement, no withdrawal needed.
+  </Step>
+</Steps>
+
+<Tip>
+  There are **no platform fees** on tips. If a reader sends 10 $STORY, you receive exactly 10 $STORY.
+</Tip>
+
+### Viewing Tip History
+
+Check your earnings:
+
+1. **Wallet Balance**: View your total $STORY in MetaMask or the social feed dashboard
+2. **Transaction History**: See individual tips on [BaseScan](https://sepolia.basescan.org/) (search your wallet address)
+3. **Profile Stats**: Track total tips received in your creator dashboard (coming soon)
+
+## Setting Up Paywalls
+
+Gate premium content behind a one-time unlock fee.
+
+### Creating a Paywalled Story
+
+<Steps>
+  <Step title="Write Your Story">
+    Navigate to `/record` and create your story (voice or text).
+  </Step>
+  <Step title="Set Paywall Amount">
+    In the story editor, scroll to "Monetization" settings and enter:
+    - **Paywall Amount**: Price in $STORY (e.g., 10 tokens)
+    - **Teaser Text**: Preview snippet to entice readers (optional)
+  </Step>
+  <Step title="Publish as Public">
+    Set privacy to "Public" so your story appears in the feed with the paywall.
+  </Step>
+  <Step title="Readers See Teaser + Unlock Button">
+    Your story card displays:
+    ```tsx
+    // Source: components/StoryCard.tsx:267-281
+    <div className="p-4 bg-[hsl(var(--story-500)/0.08)] rounded-lg">
+      <p>{story.teaser || "Premium content locked behind paywall"}</p>
+      <Button onClick={handlePaywall}>
+        Unlock for {story.paywallAmount} $STORY
+      </Button>
+    </div>
+    ```
+  </Step>
+</Steps>
+
+### Paywall Unlock Flow
+
+When a reader unlocks your story:
+
+1. **Reader Clicks "Unlock for X $STORY"**
+2. **Approval Check**: Frontend verifies token allowance
+   ```typescript
+   // Source: app/hooks/useStoryProtocol.ts:49-55
+   const payPaywall = async (authorAddress: string, amount: number, storyId: string) => {
+     const amountWei = parseEther(amount.toString());
+     if (!allowance || allowance < amountWei) {
+       toast.error("Please approve tokens first");
+       return;
+     }
+   ```
+3. **Smart Contract Execution**:
+   ```solidity
+   // Source: contracts/StoryProtocol.sol:44-52
+   function payPaywall(address author, uint256 amount, uint256 contentId) 
+     external nonReentrant whenNotPaused {
+     require(amount > 0, "Amount must be > 0");
+     storyToken.safeTransferFrom(msg.sender, author, amount);
+     emit ContentUnlocked(msg.sender, author, amount, contentId);
+   }
+   ```
+4. **Content Unlocked**: Reader gains permanent access to full story
+5. **You Receive Payment**: Tokens sent to your wallet address
+
+<Info>
+  Unlocks are permanent and tied to the reader's wallet — they can access the story anytime.
+</Info>
+
+### Best Practices for Paywalls
+
+- **Use for premium content**: Deep dives, exclusive experiences, tutorials
+- **Write compelling teasers**: Hook readers with 1-2 sentences that create curiosity
+- **Pricing guidance**: 
+  - Short stories (< 500 words): 1-5 $STORY
+  - Medium stories (500-1500 words): 5-15 $STORY
+  - Long-form (1500+ words): 15-50 $STORY
+- **Build trust first**: Publish some free stories to establish your voice
+
+<Warning>
+  Once you publish a paywalled story, you cannot change the unlock price. Choose carefully!
+</Warning>
+
+## $STORY Token Economics
+
+### Token Details
+
+| Property | Value |
+|----------|-------|
+| **Name** | eStoryToken |
+| **Symbol** | $ESTORY |
+| **Network** | Base Sepolia (Testnet) → Base Mainnet (Production) |
+| **Contract** | `0xf9eDD76B...` ([View on BaseScan](https://sepolia.basescan.org/)) |
+| **Max Supply** | 100,000,000 tokens |
+| **Decimals** | 18 |
+| **Standard** | ERC20 with Burnable + Permit extensions |
+
+### Token Distribution
+
+```solidity
+// Source: contracts/iStoryToken.sol:24-26
+// Initial supply to admin for liquidity/rewards pool
+_mint(initialAdmin, 1_000_000 * 10 ** decimals());
+```
+
+- **1M tokens**: Liquidity pool + creator rewards
+- **99M tokens**: Minted on-demand for user activity (likes, streaks, engagement)
+
+### Earning Tokens (Future)
+
+Planned reward mechanisms:
+
+<CardGroup cols={2}>
+  <Card title="Engagement Rewards" icon="heart">
+    Earn tokens when readers like, comment, or share your stories.
+  </Card>
+  <Card title="Streak Bonuses" icon="fire">
+    Daily journaling streaks unlock token multipliers.
+  </Card>
+  <Card title="Quality Metrics" icon="certificate">
+    Stories with Gold/Silver verified badges earn bonus tokens.
+  </Card>
+  <Card title="Referral Rewards" icon="users">
+    Invite creators and earn a percentage of their tips.
+  </Card>
+</CardGroup>
+
+<Note>
+  Backend mints tokens via the `MINTER_ROLE` for off-chain activity rewards (source: `contracts/iStoryToken.sol:29-32`).
+</Note>
+
+## Checking Your Balance
+
+View your $STORY holdings:
+
+### In-App Dashboard
+
+Navigate to `/social` — your balance appears in the Community Impact card:
+
+```tsx
+// Source: app/social/SocialPageClient.tsx:484-490
+<div className="text-xl font-bold">
+  {isConnected && eStoryToken?.balance !== undefined
+    ? `${Number(eStoryToken.balance / BigInt(1e18)).toFixed(0)}`
+    : "0"}
+</div>
+```
+
+### Using the Hook
+
+```typescript
+// Source: app/hooks/useIStoryToken.ts:8-19
+import { useEStoryToken } from "@/app/hooks/useIStoryToken";
+
+const { balance, formattedBalance } = useEStoryToken();
+
+console.log(balance); // bigint (e.g., 10000000000000000000n for 10 tokens)
+console.log(formattedBalance); // string (e.g., "10.0")
+```
+
+### In Your Wallet
+
+Add $STORY to MetaMask:
+
+1. Open MetaMask → "Import Tokens"
+2. Enter contract address: `0xf9eDD76B...`
+3. Token symbol auto-fills as "ESTORY"
+4. View balance in wallet home screen
+
+## Withdrawing Earnings
+
+<Info>
+  **No withdrawal needed!** All tips and paywall unlocks are sent directly to your wallet.
+</Info>
+
+To convert $STORY to ETH or stablecoins:
+
+1. **Wait for DEX Listings**: Uniswap, SushiSwap pools (post-mainnet launch)
+2. **Swap on Base DEXs**: Use Base-native exchanges like BaseSwap
+3. **Bridge to Ethereum L1**: Use official Base bridge if needed
+
+<Tip>
+  Keep your $STORY on Base to avoid L1 gas fees — Base transactions cost < $0.01.
+</Tip>
+
+## Security Best Practices
+
+### Protect Your Private Keys
+
+- **Never share** your wallet seed phrase
+- Use **hardware wallets** (Ledger, Trezor) for large balances
+- Enable **2FA** on wallet recovery emails
+
+### Contract Safety
+
+The StoryProtocol contract has built-in protections:
+
+```solidity
+// Source: contracts/StoryProtocol.sol:10
+contract StoryProtocol is ReentrancyGuard, Pausable, AccessControl {
+  using SafeERC20 for IERC20; // Prevents silent failures
+  // ...
+}
+```
+
+- **ReentrancyGuard**: Prevents double-spending attacks
+- **Pausable**: Admin can halt operations in emergencies
+- **SafeERC20**: Ensures token transfers revert on failure
+
+<Warning>
+  Only approve the official StoryProtocol contract (`0xA51a4cA0...`). Never approve unknown addresses.
+</Warning>
+
+## Tax Implications
+
+<Note>
+  Consult a tax professional. The following is informational, not tax advice.
+</Note>
+
+In most jurisdictions:
+
+- **Tips/Paywalls**: Taxable income when received (value at receipt time)
+- **Token Holdings**: Capital gains/losses when sold
+- **Record Keeping**: Export transaction history from BaseScan for tax filing
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="NFT Minting" icon="image" href="/monetization/nft-minting">
+    Turn story collections into tradable NFTs with royalties
+  </Card>
+  <Card title="Community Feed" icon="users" href="/social/community-feed">
+    Publish stories to reach more readers and earn tips
+  </Card>
+</CardGroup>

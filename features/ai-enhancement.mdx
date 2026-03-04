@@ -1,0 +1,288 @@
+---
+title: AI Enhancement
+description: Polish your stories with AI-powered grammar, flow, and vocabulary improvements
+icon: wand-magic-sparkles
+---
+
+## What is AI Enhancement?
+
+AI Enhancement uses Google Gemini 2.5 Flash to refine your journal entries while preserving your authentic voice. It fixes grammar errors, improves sentence flow, and elevates vocabulary—without changing the meaning or adding fictional events.
+
+## Why Use AI Enhancement?
+
+<CardGroup cols={2}>
+  <Card title="Preserve Your Voice" icon="user">
+    The AI keeps your personal tone and perspective intact—only polishing, never rewriting.
+  </Card>
+  <Card title="Save Time" icon="clock">
+    Get professional-quality writing in seconds instead of spending minutes editing manually.
+  </Card>
+  <Card title="Learn & Improve" icon="graduation-cap">
+    Compare before/after to see grammar patterns and expand your vocabulary.
+  </Card>
+  <Card title="Confidence Boost" icon="sparkles">
+    Share stories publicly knowing they're polished and error-free.
+  </Card>
+</CardGroup>
+
+## How to Enhance Your Story
+
+<Steps>
+  <Step title="Record or Type Your Story">
+    Start with transcribed voice recording or type directly into the **Content** field on the Record page.
+  </Step>
+
+  <Step title="Click 'Enhance with AI'">
+    Tap the **Enhance with AI** button below the content area. The button shows a magic wand icon.
+    
+    <Info>Enhancement is disabled if the text field is empty. You must have content first.</Info>
+  </Step>
+
+  <Step title="Wait for Processing">
+    A loading spinner appears with the message "Polishing story...". This typically takes 2-5 seconds.
+    
+    The AI processes up to **50,000 characters** per request (roughly 8,000 words).
+  </Step>
+
+  <Step title="Review Enhanced Text">
+    The enhanced version replaces the original text in the editor. You can:
+    - **Accept it**: Proceed to save normally
+    - **Revert it**: Click the **Revert** button (appears after enhancement)
+    - **Edit further**: Manually tweak the enhanced text before saving
+  </Step>
+
+  <Step title="Revert if Needed">
+    If you prefer the original, click the **Revert** button (amber-colored). Your pre-enhancement text is restored.
+    
+    <Warning>The revert button only appears after you've enhanced once. You can't undo a manual edit after accepting the enhancement.</Warning>
+  </Step>
+</Steps>
+
+## What the AI Changes (and Doesn't Change)
+
+### ✅ What Gets Enhanced
+
+<AccordionGroup>
+  <Accordion title="Grammar & Spelling">
+    - Fixes typos and misspellings
+    - Corrects verb tense consistency
+    - Adjusts subject-verb agreement
+    - Fixes punctuation errors (commas, periods, apostrophes)
+  </Accordion>
+
+  <Accordion title="Flow & Readability">
+    - Breaks up run-on sentences
+    - Varies sentence structure for rhythm
+    - Adds transition words for smoother connections
+    - Reorders clauses for clarity
+  </Accordion>
+
+  <Accordion title="Vocabulary Elevation">
+    - Suggests more precise words (e.g., "walked quickly" → "hurried")
+    - Avoids repetition by using synonyms
+    - Elevates casual phrases to journal-appropriate language
+  </Accordion>
+</AccordionGroup>
+
+### ❌ What Stays Unchanged
+
+<CardGroup cols={2}>
+  <Card title="Meaning" icon="message">
+    The core message and intent of your story never changes.
+  </Card>
+  <Card title="Events" icon="calendar">
+    No fictional details or events are added—only your truth.
+  </Card>
+  <Card title="Tone" icon="face-smile">
+    Your personal voice (humorous, reflective, casual) is preserved.
+  </Card>
+  <Card title="Names & Dates" icon="user-tag">
+    Specific people, places, and time references remain intact.
+  </Card>
+</CardGroup>
+
+## Enhancement Examples
+
+### Example 1: Grammar & Flow
+
+**Before:**
+> "Me and Sarah went to the park yesterday it was really fun we played frisbee and ate sandwiches I wish we could do it more often"
+
+**After:**
+> "Sarah and I went to the park yesterday. It was really fun—we played frisbee and ate sandwiches. I wish we could do it more often."
+
+**Changes:** Fixed pronoun order, added punctuation, broke up run-on sentence.
+
+---
+
+### Example 2: Vocabulary Elevation
+
+**Before:**
+> "I was really sad today because I didn't get the job. I felt bad about it all day."
+
+**After:**
+> "I felt disheartened today after not receiving the job offer. The disappointment lingered throughout the day."
+
+**Changes:** Elevated casual language while keeping the emotional truth.
+
+---
+
+### Example 3: Preserving Voice
+
+**Before:**
+> "OMG today was insane! I literally ran into my ex at the coffee shop and we just stared at each other awkwardly for like 10 seconds lol"
+
+**After:**
+> "Today was surreal! I unexpectedly ran into my ex at the coffee shop, and we just stared at each other awkwardly for about ten seconds."
+
+**Changes:** Kept the energetic tone but refined internet slang ("OMG" → "surreal", "lol" removed).
+
+## Technical Details
+
+### API Endpoint
+
+```http
+POST /api/ai/enhance
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "text": "Your story content here..."
+}
+```
+
+### Limits & Constraints
+
+| Parameter | Limit |
+|-----------|-------|
+| Max text length | 50,000 characters |
+| Rate limit | 10 requests/minute (per user) |
+| Model | Google Gemini 2.5 Flash |
+| Response time | 2-8 seconds (varies by length) |
+
+<Warning>
+  If your story exceeds 50,000 characters, you'll receive a 400 error: `"Text exceeds maximum length"`. Break it into smaller entries.
+</Warning>
+
+### The Enhancement Prompt
+
+The AI receives this instruction (from `/api/ai/enhance/route.ts:36`):
+
+```
+You are an expert storytelling editor. Please enhance the following journal entry.
+- Fix grammar and spelling errors.
+- Improve the flow and vocabulary while keeping the original personal tone.
+- Do not change the underlying meaning or add fictional events.
+- Return ONLY the enhanced text. Do not include quotes around the result.
+```
+
+## UI States & Feedback
+
+### Button States
+
+| State | Visual | Meaning |
+|-------|--------|----------|
+| **Idle** | Gray outline button with wand icon | Ready to enhance |
+| **Disabled** | Grayed out, unclickable | No content to enhance OR currently processing |
+| **Enhancing** | Spinner + "Polishing story..." toast | AI is working |
+| **Revert Available** | Amber button with undo icon | Original text can be restored |
+
+### Status Badges
+
+While enhancement runs, a badge appears in the Card header:
+
+<Note>
+  **Enhancing...** badge with loading spinner shows at the top-right of the Content card.
+</Note>
+
+## Revert Functionality
+
+<Accordion title="How Revert Works">
+  When you click **Enhance with AI**, the original text is saved to `preEnhanceText` state. Clicking **Revert** swaps it back.
+  
+  **Limitations:**
+  - Only one level of undo (can't revert twice)
+  - Revert button disappears after you save the story
+  - Manual edits after enhancement can't be undone
+  
+  **Code reference:** `/app/record/RecordPageClient.tsx:285-291`
+</Accordion>
+
+## Error Handling
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="'No text provided' (400)">
+    **Cause:** Empty or whitespace-only text field.
+    
+    **Solution:** Add content before clicking Enhance.
+  </Accordion>
+
+  <Accordion title="'Text exceeds maximum length' (400)">
+    **Cause:** Story content > 50,000 characters.
+    
+    **Solution:** Split into multiple shorter entries or trim unnecessary details.
+  </Accordion>
+
+  <Accordion title="'Failed to enhance text' (500)">
+    **Cause:** Gemini API rate limit, network issue, or server misconfiguration.
+    
+    **Solution:** Wait 60 seconds and try again. If persistent, check server logs for API key errors.
+  </Accordion>
+
+  <Accordion title="'Please sign in to enhance' (client-side)">
+    **Cause:** No authentication token available.
+    
+    **Solution:** Sign in with wallet or Google OAuth before enhancing.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Tip>
+  **When to Use Enhancement:**
+  - After voice transcription (fixes transcription errors)
+  - Before publishing publicly (polish for audience)
+  - When writing in a rush (quick cleanup)
+  
+  **When to Skip Enhancement:**
+  - Raw emotional venting (authenticity > polish)
+  - Stream-of-consciousness journaling
+  - Intentionally casual or experimental writing
+</Tip>
+
+## Privacy & Data Handling
+
+<Info>
+  **Your text is processed securely:**
+  - Sent to Google Gemini API via HTTPS (encrypted in transit)
+  - Not stored by Google for training (per Gemini API terms)
+  - Only authenticated users can enhance (Bearer token required)
+  - No text logging on eStory servers (check `/api/ai/enhance/route.ts:54` for console.error on failures only)
+</Info>
+
+## Comparison: Manual Editing vs. AI Enhancement
+
+| Aspect | Manual Editing | AI Enhancement |
+|--------|----------------|----------------|
+| Time | 5-15 minutes | 3-5 seconds |
+| Grammar | Requires knowledge | Automatic |
+| Flow | Subjective | Optimized by AI |
+| Voice preservation | Full control | 95% preserved |
+| Learning opportunity | Limited | High (compare before/after) |
+| Best for | Creative control | Speed + polish |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cognitive Insights" icon="brain" href="/features/cognitive-insights">
+    Extract themes and emotions from your enhanced stories
+  </Card>
+  <Card title="Voice Journaling" icon="mic" href="/features/voice-journaling">
+    Learn how to record stories with AI transcription
+  </Card>
+  <Card title="Blockchain Storage" icon="link" href="/features/blockchain-storage">
+    Publish your polished stories to permanent IPFS storage
+  </Card>
+</CardGroup>
