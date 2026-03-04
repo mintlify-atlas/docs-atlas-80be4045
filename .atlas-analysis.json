@@ -1,0 +1,138 @@
+{
+  "projectType": "saas",
+  "projectName": "iStory",
+  "projectDescription": "AI-powered Web3 voice journaling platform that transforms personal narratives into blockchain-secured NFTs with cognitive analysis and monetization.",
+  "theme": "almond",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#A78BFA",
+  "darkColor": "#7C3AED",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "features"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/voice-journaling",
+              "features/ai-enhancement",
+              "features/blockchain-storage",
+              "features/cognitive-insights",
+              "features/local-vault"
+            ]
+          },
+          {
+            "group": "Social & Monetization",
+            "pages": [
+              "social/community-feed",
+              "social/engagement",
+              "monetization/earning",
+              "monetization/nft-minting"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "user-guide/authentication",
+              "user-guide/recording-stories",
+              "user-guide/library-management",
+              "user-guide/profile-settings"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Reference",
+        "groups": [
+          {
+            "group": "Smart Contracts",
+            "pages": [
+              "contracts/overview",
+              "contracts/istory-token",
+              "contracts/story-protocol",
+              "contracts/story-nft",
+              "contracts/verified-metrics"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/ai-endpoints",
+              "api/story-endpoints",
+              "api/social-endpoints"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/tech-stack",
+              "architecture/security",
+              "architecture/database",
+              "architecture/cre-integration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "developers/setup",
+              "developers/environment",
+              "developers/local-development"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "developers/testing",
+              "developers/deployment",
+              "developers/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Voice-to-text journaling with ElevenLabs Scribe AI transcription",
+    "AI-powered text enhancement and cognitive analysis via Google Gemini",
+    "Blockchain permanence with NFT minting on Base L2",
+    "Local encrypted vault with AES-256-GCM client-side encryption",
+    "Social feed with likes, tips, comments, and follower system",
+    "Monetization through $STORY token rewards, paywalls, and NFT sales",
+    "Chainlink CRE verifiable AI metrics with privacy-preserving on-chain proofs",
+    "Dual authentication: Web3 wallet and Google OAuth with account linking"
+  ],
+  "publicApiSurface": [
+    "POST /api/ai/transcribe - Convert audio to text",
+    "POST /api/ai/enhance - AI text enhancement",
+    "POST /api/ai/analyze - Extract cognitive metadata",
+    "POST /api/journal/save - Save story entries",
+    "POST /api/social/like - Like/unlike stories",
+    "POST /api/social/follow - Follow/unfollow users",
+    "POST /api/tip - Send $STORY token tips",
+    "POST /api/paywall - Unlock paywalled content",
+    "POST /api/book/compile - Compile stories into books",
+    "GET /api/notifications - Fetch user notifications",
+    "POST /api/cre/trigger - Trigger Chainlink CRE workflow",
+    "useEStoryToken - ERC20 token balance and approve hooks",
+    "useStoryProtocol - Tipping and paywall contract hooks",
+    "useStoryNFT - NFT minting hooks",
+    "useVerifiedMetrics - CRE-attested metrics polling",
+    "useVault - Local encryption vault management",
+    "useLocalStories - Encrypted IndexedDB CRUD operations"
+  ]
+}
